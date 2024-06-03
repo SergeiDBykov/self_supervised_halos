@@ -1,1 +1,3 @@
 *.hdf5
+simCLR_MNIST/models
+simCLR_MNIST/data
