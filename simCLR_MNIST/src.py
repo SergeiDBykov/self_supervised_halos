@@ -11,6 +11,9 @@ import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 
+from sklearn.manifold import TSNE
+#import umap #conda install -c conda-forge umap-learn
+
 
 LOAD_MODELS = True
 
@@ -172,7 +175,8 @@ def simCLR_train(model, criterion, optimizer, scheduler,
 
                 model.train()
                 val_loss /= len(dataloader_val.dataset)
-                pbar_epoch.set_postfix({'Loss': f'{running_loss / len(dataloader_train.dataset):.5f}', 'Val Loss': f'{val_loss:.5f}'})
+
+                pbar_epoch.set_postfix({'Loss': f'{running_loss:.5f}', 'Val Loss': f'{val_loss:.5f}'})
 
 
             history['train_loss'].append(running_loss)
@@ -192,19 +196,15 @@ def simCLR_train(model, criterion, optimizer, scheduler,
 
 
 
-def downstream_train(classification_model,
-                    simclr_model,
-                    criterion, optimizer, scheduler,
-                    dataloader_train, dataloader_val=None,
-                    history=None,
-                    epochs = 5, device = 'cpu'):
+def classic_train(model, criterion, optimizer, scheduler,
+                dataloader_train, dataloader_val=None,
+                history=None,
+                epochs = 5, device = 'cpu'):
     
-
     pbar_epoch = tqdm(range(epochs), desc='Epochs')
 
     if history is None:
         history = {'train_loss': [], 'val_loss': []}
-
 
     try:
 
@@ -213,17 +213,19 @@ def downstream_train(classification_model,
 
             for images, labels in dataloader_train:
                 images = images.to(device)
+                labels = labels.to(device)
 
-                with torch.no_grad():
-                    representations = simclr_model.encoder(images)
+                batch_size_curr = images.size(0)
 
-                outputs = classification_model(representations)
+                outputs = model(images)
+
                 loss = criterion(outputs, labels)
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                scheduler.step()
+                scheduler.step() if scheduler is not None else None
+
 
                 running_loss += loss.item() * batch_size_curr
 
@@ -233,25 +235,25 @@ def downstream_train(classification_model,
 
 
             if dataloader_val is not None:
-                classification_model.eval()
+                model.eval()
                 val_loss = 0.0
                 with torch.no_grad():
                     for images, labels in dataloader_val:
                         images = images.to(device)
+                        labels = labels.to(device)
+
                         batch_size_curr = images.size(0)
 
-                        with torch.no_grad():
-                            representations = simclr_model.encoder(images)
-                        
-                        outputs = classification_model(representations)
+                        outputs = model(images)
+
                         loss = criterion(outputs, labels)
 
                         val_loss += loss.item() * batch_size_curr
 
-
-                classification_model.train()
+                model.train()
                 val_loss /= len(dataloader_val.dataset)
-                pbar_epoch.set_postfix({'Loss': f'{running_loss / len(dataloader_train.dataset):.5f}', 'Val Loss': f'{val_loss:.5f}'})
+
+                pbar_epoch.set_postfix({'Loss': f'{running_loss:.5f}', 'Val Loss': f'{val_loss:.5f}'})
 
 
             history['train_loss'].append(running_loss)
@@ -262,12 +264,93 @@ def downstream_train(classification_model,
     
     finally:
         if LOAD_MODELS:
-            torch.save(classification_model.state_dict(), 'models/downstream')
-            pd.DataFrame(history).to_csv('models/downstream_history.csv', index=False)
+            torch.save(model.state_dict(), 'models/classic')
+            pd.DataFrame(history).to_csv('models/classic_history.csv', index=False)
             print('Model and history saved')
     
 
     return history
+
+
+
+
+# def downstream_train(classification_model,
+#                     simclr_model,
+#                     criterion, optimizer, scheduler,
+#                     dataloader_train, dataloader_val=None,
+#                     history=None,
+#                     epochs = 5, device = 'cpu'):
+    
+
+#     pbar_epoch = tqdm(range(epochs), desc='Epochs')
+
+#     if history is None:
+#         history = {'train_loss': [], 'val_loss': []}
+
+
+#     try:
+
+#         for epoch in pbar_epoch:
+#             running_loss = 0.0
+
+#             for images, labels in dataloader_train:
+#                 images = images.to(device)
+
+#                 with torch.no_grad():
+#                     representations = simclr_model.encoder(images)
+
+#                 outputs = classification_model(representations)
+#                 loss = criterion(outputs, labels)
+
+#                 optimizer.zero_grad()
+#                 loss.backward()
+#                 optimizer.step()
+#                 scheduler.step()
+
+#                 running_loss += loss.item() * batch_size_curr
+
+#             running_loss /= len(dataloader_train.dataset)
+#             if dataloader_val is None:
+#                 pbar_epoch.set_postfix({'Loss': f'{running_loss:.5f}'})
+
+
+#             if dataloader_val is not None:
+#                 classification_model.eval()
+#                 val_loss = 0.0
+#                 with torch.no_grad():
+#                     for images, labels in dataloader_val:
+#                         images = images.to(device)
+#                         batch_size_curr = images.size(0)
+
+#                         with torch.no_grad():
+#                             representations = simclr_model.encoder(images)
+                        
+#                         outputs = classification_model(representations)
+#                         loss = criterion(outputs, labels)
+
+#                         val_loss += loss.item() * batch_size_curr
+
+
+#                 classification_model.train()
+#                 val_loss /= len(dataloader_val.dataset)
+
+#                 pbar_epoch.set_postfix({'Loss': f'{running_loss / len(dataloader_train.dataset):.5f}', 'Val Loss': f'{val_loss:.5f}'})
+
+
+#             history['train_loss'].append(running_loss)
+#             history['val_loss'].append(val_loss if dataloader_val is not None else -1.0)
+
+#     except KeyboardInterrupt:
+#         print(f'Training interrupted by user at epoch {epoch}/{epochs}')
+    
+#     finally:
+#         if LOAD_MODELS:
+#             torch.save(classification_model.state_dict(), 'models/downstream')
+#             pd.DataFrame(history).to_csv('models/downstream_history.csv', index=False)
+#             print('Model and history saved')
+    
+
+#     return history
 
                      
 
@@ -296,3 +379,49 @@ def visualize_batch(dataloader, n=8,  transform=contrast_transforms):
     #remove space between subplots
     plt.subplots_adjust(wspace=0, hspace=0)
     plt.show()
+
+
+
+
+def visualize_batch_embeddings(model, dataloader, device = 'cpu', N = 500):
+    #using model encoder, visualize the embeddings of a batch of images
+    #then make tsne or umap plot of the embeddings. plot the embeddings of the same class(label) with the same color
+    model = model.to(device)
+    model.eval()
+    embeddings = []
+    labels = []
+
+    with torch.no_grad():
+        for images, labels_batch in dataloader:
+            images = images.to(device)
+            representations = model.encoder(images)
+            embeddings.append(representations.cpu().numpy())
+            labels.append(labels_batch.cpu().numpy())
+    
+    embeddings = np.concatenate(embeddings, axis=0)
+    labels = np.concatenate(labels, axis=0)
+
+    #randomly sample N points
+    indices = np.random.choice(embeddings.shape[0], N, replace=False)
+    embeddings = embeddings[indices]
+    labels = labels[indices]
+
+
+    #for method in ['tsne', 'umap']:
+    for method in ['tsne']:
+        plt.figure(figsize=(8, 8))
+
+
+        if method == 'tsne':
+            embeddings_2d = TSNE(n_components=2).fit_transform(embeddings)
+        else:
+            embeddings_2d = umap.UMAP(n_components=2).fit_transform(embeddings)
+
+        plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], c=labels, cmap='tab10')
+
+        plt.colorbar()
+        plt.title(f'Embeddings visualized using {method}')
+        plt.show()
+
+
+
