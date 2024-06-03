@@ -109,6 +109,7 @@ class SimCLRLoss(nn.Module): #TODO check/test this loss
 
 
 
+
 def simCLR_train(model, criterion, optimizer, scheduler,
                 dataloader_train, dataloader_val=None,
                 history=None,
