@@ -15,13 +15,23 @@ from sklearn.manifold import TSNE
 #import umap #conda install -c conda-forge umap-learn
 
 
+
+contrastive_transform = transforms.Compose([
+                                transforms.RandomResizedCrop(size=(28, 28), scale = (0.5, 0.95)),
+                                transforms.RandomRotation(degrees=45),
+                                transforms.ToTensor(),
+                                    ])
+
+
+
+
 class TwoCropTransform:
     """Create two crops of the same image"""
-    def __init__(self, transform):
+    def __init__(self, transform = contrastive_transform):
         self.transform = transform
 
     def __call__(self, x):
-        return [self.transform(x), self.transform(x), x]
+        return [self.transform(x), self.transform(x), transforms.ToTensor()(x)]
 
 
 
@@ -30,16 +40,18 @@ class SupConLoss(nn.Module): #TODO check/test this loss
     #src: https://github.com/giakoumoglou/classification/tree/main/notebooks
     #if no labels are provided, it is basically the SimCLRLoss #TODO check this with SimCLRLoss class
     def __init__(self, temperature=0.07, contrast_mode='all',
-                 base_temperature=0.07):
+                 base_temperature=0.07,
+                 device = 'cpu'):
         super(SupConLoss, self).__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
+        self.device = device
+
     def forward(self, features, labels=None, mask=None):
-        device = (torch.device('cuda')
-                  if features.is_cuda
-                  else torch.device('cpu'))
+
+        device = self.device
 
         if len(features.shape) < 3:
             raise ValueError('`features` needs to be [bsz, n_views, ...],'
@@ -102,3 +114,72 @@ class SupConLoss(nn.Module): #TODO check/test this loss
         loss = loss.view(anchor_count, batch_size).mean()
 
         return loss
+
+
+
+def supcon_train_step(epoch, 
+                model, criterion, optimizer, 
+                scheduler,
+                dataloader_train, 
+                history=None, device = 'cpu'):
+    
+    model.train()
+
+    running_loss = 0.0
+    for data, target in dataloader_train:
+        batch_size = data[0].shape[0]
+        data = torch.cat([data[0], data[1]], dim=0)
+        data = data.to(device)
+
+
+
+        features = model(data)
+
+        f1, f2 = torch.split(features, [batch_size, batch_size], dim=0)
+        features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+
+        loss = criterion(features)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step() if scheduler is not None else None
+
+        running_loss += loss.item()
+    
+    running_loss = running_loss/len(dataloader_train)
+    if history is not None:
+        history['train_loss'].append(running_loss)
+    
+    return running_loss
+
+
+def supcon_train(epochs,
+                model, criterion, optimizer, 
+                scheduler,
+                dataloader_train, 
+                history=None, device = 'cpu'):
+    
+
+    pbar_epoch = tqdm(range(epochs), desc='Epochs')
+
+    if history is None:
+        history = {'train_loss': [], 'val_loss': []}
+
+    try:
+        for epoch in pbar_epoch:
+            loss = supcon_train_step(epoch, 
+                                    model, criterion, optimizer, 
+                                    scheduler,
+                                    dataloader_train, 
+                                    history, device)
+            pbar_epoch.set_postfix({'loss': loss})
+    except KeyboardInterrupt:
+        print('Interrupted')
+
+    finally:
+        torch.save(model.state_dict(), 'models/supcon.pth')
+        pd.DataFrame(history).to_csv('models/supcon_history.csv', index=False)
+        print('Model and history saved')        
+
+    return history
