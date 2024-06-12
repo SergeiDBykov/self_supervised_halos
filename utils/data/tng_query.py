@@ -452,8 +452,22 @@ class HaloInfo:
         plt.show()
 
 
-    def plot_density(self):
-        dens_res = self.make_3d_density()
-        self._plot_3d_density(dens_res)
 
-    
+    def make_mass_history(self):
+        sublink_file = self.sublink_file
+        with h5py.File(sublink_file, 'r') as f:
+            snap = f['SnapNum'][:]
+            mass = f['SubhaloMass'][:]
+            id = f['SubhaloID'][:]
+
+            id_0 = id[0]
+
+            #only id==id_0
+            mask = id == id_0
+            snap = snap[mask]
+            mass = mass[mask]
+
+            mass_dict = dict(zip(snap, mass))
+
+        return mass_dict
+
