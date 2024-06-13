@@ -31,6 +31,11 @@ softening_dm_comoving = 1.0 #ckpc/h, https://www.tng-project.org/data/forum/topi
 #to get physical units from comoving:
 #physical = comoving * a / h, see task 6  rr *= scale_factor/little_h # ckpc/h -> physical kpc from https://www.tng-project.org/data/docs/api/
 
+
+#TODO make get for the case when I am on the server and use simulation files directly
+
+is_freya = True if 'freya' in os.uname().nodename else False
+
 def get(path, params=None):
     # make HTTP GET request to path
     r = requests.get(path, params=params, headers=headers)
@@ -307,7 +312,7 @@ class HaloInfo:
         ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
 
         #f.colorbar(im, cax=axcolor, orientation='vertical')
-        f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'negative  log10 [density/max density]')
+        f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [density/max density]')
         ax.set_title(f'xy smoothed density, halo {dens_res["haloid"]}; logM {dens_res["mass_log_msun"]:.2f} Msun/h')
         plt.show()
 
@@ -332,7 +337,7 @@ class HaloInfo:
         ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
 
         #f.colorbar(im, cax=axcolor, orientation='vertical')
-        f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'negative  log10 [density/max density]')
+        f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [density/max density]')
         ax.set_title(f'projected smoothed density, halo {dens_res["haloid"]}; logM {dens_res["mass_log_msun"]:.2f} Msun/h')
         plt.show()
 
