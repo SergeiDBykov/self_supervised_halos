@@ -10,12 +10,14 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
+import scipy.ndimage
+
 
 import illustris_python as il
 
-if not is_freya:
-    import MAS_library as pylians_MASL
-    import smoothing_library as pylians_SL
+# if not is_freya:
+#     import MAS_library as pylians_MASL
+#     import smoothing_library as pylians_SL
 
 
 
@@ -48,6 +50,11 @@ except:
     subhalos_df = pd.read_csv(data_path+'subhalos_df.csv', index_col=0)
 
 
+
+def smooth_hist(hist, filter_size_pix = 2):
+    hist_filtered = scipy.ndimage.gaussian_filter(hist, filter_size_pix)
+    return hist_filtered
+    
 
 def get(path, params=None):
     # make HTTP GET request to path
@@ -171,10 +178,7 @@ class HaloInfo:
 
     def make_3d_density(self,
                         box_half_size = -5,
-                        grid_bins = 128,
-                        smooth_R = 5,
-                        smooth_type = 'Gaussian',
-                        clip_smoothed = 1e-5
+                        grid_bins = 64,
                         ):
         
         haloid = self.haloid
@@ -222,48 +226,25 @@ class HaloInfo:
         #hist = hist.astype(np.int32)
 
 
-        if not is_freya:
-            # #pylians3 https://pylians3.readthedocs.io/en/master/construction.html
-            W_k = pylians_SL.FT_filter(2*box_half_size, smooth_R, grid_bins, smooth_type, 28)
-
-            hist_smoothed = pylians_SL.field_smoothing(hist, W_k, 28)
-
-            if clip_smoothed is not None:
-                hist_smoothed[hist_smoothed < clip_smoothed] = 0
-
-        else:
-            hist_smoothed = None
-
-
 
         projections_2d = {}
-        projections_2d_smoothed = {}
         proj_name = ['yz', 'xz', 'xy']
 
         for axis_i in range(3):
             proj = proj_name[axis_i]
             map_2d = hist.sum(axis = axis_i).T
-            if not is_freya:
-                map_2d_smoothed = hist_smoothed.sum(axis = axis_i).T
-            else:
-                map_2d_smoothed = None
 
             projections_2d[proj] = map_2d
-            projections_2d_smoothed[proj] = map_2d_smoothed
 
         result = {
                 'hist':hist, 
-                'hist_smoothed':hist_smoothed, 
                 'edges':edges, 
                 'edge_binsize':edge_binsize,
                 'box_half_size': box_half_size,
                 'half_mass_rad':half_mass_rad,
                 'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
                 'projections':projections_2d,
-                'projections_smoothed':projections_2d_smoothed,
-                #'haloid':haloid, 
-                #'pos':pos, 'pot':pot, 
-                  }
+                }
 
         return result
 
@@ -275,9 +256,13 @@ class HaloInfo:
                         proj = 'xy',
                         ax = None, 
                         levels = [-5,-4,-3,-2,-1],
-                        smoothed = True):
+                        smooth_size = 1):
 
-        map_2d = dens_res['projections_smoothed'][proj] if smoothed else dens_res['projections'][proj]
+        map_2d = dens_res['projections'][proj]
+
+        if smooth_size:
+            map_2d = smooth_hist(map_2d, filter_size_pix=smooth_size)
+
 
         map_2d = np.log10(map_2d/np.nanmax(map_2d))
 
@@ -351,5 +336,6 @@ class HaloInfo:
         self.plot_mass_history(ax = ax4)
 
         self.plot_2d_density(dens)
+
 
 
