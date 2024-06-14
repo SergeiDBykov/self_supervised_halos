@@ -11,11 +11,11 @@ from tqdm import tqdm
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
 
-
-import MAS_library as pylians_MASL
-import smoothing_library as pylians_SL
-
 import illustris_python as il
+
+if not is_freya:
+    import MAS_library as pylians_MASL
+    import smoothing_library as pylians_SL
 
 
 
@@ -166,9 +166,8 @@ class HaloInfo:
 
 
 
-
     def make_3d_density(self,
-                        box_half_size = 500,
+                        box_half_size = -5,
                         grid_bins = 128,
                         smooth_R = 5,
                         smooth_type = 'Gaussian',
@@ -217,17 +216,21 @@ class HaloInfo:
 
         #TODO NOTE THAT float32 is used, so the values are not very precise
         hist = hist.astype(np.float32)
+        #hist = hist.astype(np.int32)
 
 
+        if not is_freya:
+            # #pylians3 https://pylians3.readthedocs.io/en/master/construction.html
+            W_k = pylians_SL.FT_filter(2*box_half_size, smooth_R, grid_bins, smooth_type, 28)
 
-        # #pylians3 https://pylians3.readthedocs.io/en/master/construction.html
+            hist_smoothed = pylians_SL.field_smoothing(hist, W_k, 28)
 
-        W_k = pylians_SL.FT_filter(2*box_half_size, smooth_R, grid_bins, smooth_type, 28)
+            if clip_smoothed is not None:
+                hist_smoothed[hist_smoothed < clip_smoothed] = 0
 
-        hist_smoothed = pylians_SL.field_smoothing(hist, W_k, 28)
+        else:
+            hist_smoothed = None
 
-        if clip_smoothed is not None:
-            hist_smoothed[hist_smoothed < clip_smoothed] = 0
 
 
         projections_2d = {}
@@ -237,7 +240,10 @@ class HaloInfo:
         for axis_i in range(3):
             proj = proj_name[axis_i]
             map_2d = hist.sum(axis = axis_i).T
-            map_2d_smoothed = hist_smoothed.sum(axis = axis_i).T
+            if not is_freya:
+                map_2d_smoothed = hist_smoothed.sum(axis = axis_i).T
+            else:
+                map_2d_smoothed = None
 
             projections_2d[proj] = map_2d
             projections_2d_smoothed[proj] = map_2d_smoothed
