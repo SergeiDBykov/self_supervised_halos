@@ -4,6 +4,7 @@ import numpy as np
 import h5py
 import os
 import time
+import pandas as pd
 from pylab import figure, cm
 from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
@@ -32,6 +33,11 @@ softening_dm_comoving = 1.0 #ckpc/h, https://www.tng-project.org/data/forum/topi
 #physical = comoving * a / h, see task 6  rr *= scale_factor/little_h # ckpc/h -> physical kpc from https://www.tng-project.org/data/docs/api/
 
 
+subhalos_df = pd.read_pickle(data_path[:-4]+'subhalos_df.pkl')
+
+
+
+
 #TODO make get for the case when I am on the server and use simulation files directly
 
 is_freya = True if 'freya' in os.uname().nodename else False
@@ -55,7 +61,6 @@ def get(path, params=None):
     return r
 
 
-
 class HaloInfo:
     def __init__(self, haloid):
         self.haloid = haloid
@@ -68,9 +73,8 @@ class HaloInfo:
         self.cutout_file = data_path + f'/halo_{haloid}_cutout.hdf5'
         self.sublink_file = data_path + f'/halo_{haloid}_sublink.hdf5'
 
-        #get attrubutes via url like this:
-        #meta = get(halo.halo_url)
-        #meta['mass] etc... but get takes time
+        series = subhalos_df.loc[haloid]
+        self.meta = series.to_dict()
 
 
     def __repr__(self):
@@ -114,39 +118,6 @@ class HaloInfo:
                 if verbose: print(f'stopping')
                 return None
 
-
-    def download_sublink(self, retry = True):
-        subhalo_url = self.halo_url
-
-        try:
-            halo_id = subhalo_url.split('/')[-2]
-            mass_hist_name = f'halo_{halo_id}_sublink.hdf5'
-            filepath = f'{data_path}/{mass_hist_name}'
-
-            if os.path.exists(filepath):
-                filesize = os.path.getsize(filepath)
-                print(f'{mass_hist_name} already exists, {filesize/1e6:.2f} MB')
-                return filepath
-            
-            t0 = time.time()
-
-            download_url = subhalo_url + 'sublink/full.hdf5'
-            print(f'Downloading cutout from {download_url}')
-            sublink = get(download_url)
-            t1 = time.time()
-            filesize = os.path.getsize(sublink)
-            print(f'Downloaded {mass_hist_name} in {t1-t0:.2f} s, {filesize/1e6:.2f} MB')
-            os.rename(sublink, filepath)
-            return filepath
-
-        except Exception as e:
-            print(f'Error downloading sublink {subhalo_url}, {e}')
-            if retry:
-                print(f'retrying...')
-                return self.download_sublink(retry = False)
-            else:
-                print(f'stopping')
-                return None
 
 
     def make_3d_density(self,
@@ -370,21 +341,55 @@ class HaloInfo:
 
 
 
-    def make_mass_history(self):
-        sublink_file = self.sublink_file
-        with h5py.File(sublink_file, 'r') as f:
-            snap = f['SnapNum'][:]
-            mass = f['SubhaloMass'][:]
-            id = f['SubhaloID'][:]
+    # def make_mass_history(self):
+    #     sublink_file = self.sublink_file
+    #     with h5py.File(sublink_file, 'r') as f:
+    #         snap = f['SnapNum'][:]
+    #         mass = f['SubhaloMass'][:]
+    #         id = f['SubhaloID'][:]
 
-            id_0 = id[0]
+    #         id_0 = id[0]
 
-            #only id==id_0
-            mask = id == id_0
-            snap = snap[mask]
-            mass = mass[mask]
+    #         #only id==id_0
+    #         mask = id == id_0
+    #         snap = snap[mask]
+    #         mass = mass[mask]
 
-            mass_dict = dict(zip(snap, mass))
+    #         mass_dict = dict(zip(snap, mass))
 
-        return mass_dict
+    #     return mass_dict
 
+
+
+    # def download_sublink(self, retry = True):
+    #     subhalo_url = self.halo_url
+
+    #     try:
+    #         halo_id = subhalo_url.split('/')[-2]
+    #         mass_hist_name = f'halo_{halo_id}_sublink.hdf5'
+    #         filepath = f'{data_path}/{mass_hist_name}'
+
+    #         if os.path.exists(filepath):
+    #             filesize = os.path.getsize(filepath)
+    #             print(f'{mass_hist_name} already exists, {filesize/1e6:.2f} MB')
+    #             return filepath
+            
+    #         t0 = time.time()
+
+    #         download_url = subhalo_url + 'sublink/full.hdf5'
+    #         print(f'Downloading cutout from {download_url}')
+    #         sublink = get(download_url)
+    #         t1 = time.time()
+    #         filesize = os.path.getsize(sublink)
+    #         print(f'Downloaded {mass_hist_name} in {t1-t0:.2f} s, {filesize/1e6:.2f} MB')
+    #         os.rename(sublink, filepath)
+    #         return filepath
+
+    #     except Exception as e:
+    #         print(f'Error downloading sublink {subhalo_url}, {e}')
+    #         if retry:
+    #             print(f'retrying...')
+    #             return self.download_sublink(retry = False)
+    #         else:
+    #             print(f'stopping')
+    #             return None
