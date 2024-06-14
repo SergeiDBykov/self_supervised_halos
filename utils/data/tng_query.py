@@ -1,26 +1,34 @@
-from ..utils import rep_path, data_path
+from ..utils import rep_path, data_path, is_freya, sim_path
+
 import requests
 import numpy as np
 import h5py
 import os
 import time
 import pandas as pd
-from pylab import figure, cm
-from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from mpl_toolkits.mplot3d import Axes3D
+import pickle
+
 
 import MAS_library as pylians_MASL
 import smoothing_library as pylians_SL
 
-data_path = data_path + '/tng'
-baseUrl = 'http://www.tng-project.org/api/'
-headers = {"api-key":"9af02c30810f12be44f17ad2bd4b6510"}
+import illustris_python as il
 
-sim_name = 'TNG100-1-Dark'
+
+
+with open(rep_path+'/tng_api_key.txt', 'r') as f:
+    api_key = f.read().strip()
+
+headers = {"api-key":api_key}
+
 redshift = 0.0
-base_query = f'/{sim_name}/snapshots/z={redshift}/'
+snapshot = 99
+
+baseUrl = 'http://www.tng-project.org/api/'
+base_query = f'/TNG100-1-Dark/snapshots/{snapshot}/'
 
 h = 0.6774 #TODO get from API??
 omega_0 = 0.3089
@@ -32,15 +40,11 @@ softening_dm_comoving = 1.0 #ckpc/h, https://www.tng-project.org/data/forum/topi
 #to get physical units from comoving:
 #physical = comoving * a / h, see task 6  rr *= scale_factor/little_h # ckpc/h -> physical kpc from https://www.tng-project.org/data/docs/api/
 
-
-subhalos_df = pd.read_pickle(data_path[:-4]+'subhalos_df.pkl')
-
-
+subhalos_df = pd.read_pickle(data_path+'subhalos_df.pkl')
+subhalos_mass_history = pickle.load(open(data_path+'subhalos_history.pkl', 'rb'))
 
 
-#TODO make get for the case when I am on the server and use simulation files directly
 
-is_freya = True if 'freya' in os.uname().nodename else False
 
 def get(path, params=None):
     # make HTTP GET request to path
@@ -61,6 +65,16 @@ def get(path, params=None):
     return r
 
 
+def get_subhalo_from_sim(subhaloID):
+    assert is_freya, 'This function is only for Freya'
+    base_path = sim_path+'output/'
+
+    snap = il.snapshot.loadSubhalo(base_path, snapNum=snapshot, id = subhaloID, partType = 1)
+    return snap
+
+
+
+
 class HaloInfo:
     def __init__(self, haloid):
         self.haloid = haloid
@@ -70,11 +84,14 @@ class HaloInfo:
         self.cutout_url = f'{self.halo_url}cutout.hdf5'
         self.sublink_url = f'{self.halo_url}sublink/full.hdf5'
 
-        self.cutout_file = data_path + f'/halo_{haloid}_cutout.hdf5'
-        self.sublink_file = data_path + f'/halo_{haloid}_sublink.hdf5'
+        self.cutout_file = data_path + f'tng/halo_{haloid}_cutout.hdf5'
+        self.sublink_file = data_path + f'tng/halo_{haloid}_sublink.hdf5'
 
         series = subhalos_df.loc[haloid]
         self.meta = series.to_dict()
+        self.mass_log_msun = np.log10(self.meta['SubhaloMass']*1e10/h)
+
+        self.mass_history = subhalos_mass_history[haloid]
 
 
     def __repr__(self):
@@ -83,6 +100,9 @@ class HaloInfo:
 
     #make download_halo_snapshot but as a method
     def download_halo_snapshot(self, retry = True, verbose = True):
+        if is_freya:
+            raise Exception('Cannot download on Freya')
+
         subhalo_url = self.halo_url
         try:
             halo_id = subhalo_url.split('/')[-2]
@@ -119,9 +139,36 @@ class HaloInfo:
                 return None
 
 
+    def get_snapshot(self):
+        if not is_freya:
+            cutout_file = self.cutout_file
+            snap = {}
+            with h5py.File(cutout_file, 'r') as f:
+                x = f['PartType1']['Coordinates'][:,0] #units of [ckpc/h]
+                y = f['PartType1']['Coordinates'][:,1]
+                z = f['PartType1']['Coordinates'][:,2]
+                pot = f['PartType1']['Potential'][:]
+
+                snap['x'] = x
+                snap['y'] = y
+                snap['z'] = z
+                snap['pot'] = pot
+        
+        if is_freya:
+            snap = get_subhalo_from_sim(self.haloid)
+            snap['x'] = snap['Coordinates'][:,0]
+            snap['y'] = snap['Coordinates'][:,1]
+            snap['z'] = snap['Coordinates'][:,2]
+            snap['pot'] = snap['Potential']
+
+
+        return snap
+
+
+
 
     def make_3d_density(self,
-                        box_size = 500,
+                        box_half_size = 500,
                         grid_bins = 128,
                         smooth_R = 5,
                         smooth_type = 'Gaussian',
@@ -130,266 +177,170 @@ class HaloInfo:
         
         haloid = self.haloid
 
-        cutout_file = self.cutout_file
+        snap = self.get_snapshot()
+        x = snap['x']
+        y = snap['y']
+        z = snap['z']
+        pot = snap['pot']
 
-        with h5py.File(cutout_file, 'r') as f:
-            x = f['PartType1']['Coordinates'][:,0] #units of [ckpc/h]
-            y = f['PartType1']['Coordinates'][:,1]
-            z = f['PartType1']['Coordinates'][:,2]
-            pot = f['PartType1']['Potential'][:]
-
-            #coords of max potential
-            max_pot = np.argmin(pot)
-            x_max = x[max_pot]
-            y_max = y[max_pot]
-            z_max = z[max_pot]
-
-            #centering
-            x -= x_max
-            y -= y_max
-            z -= z_max
-
-            pos = np.array([x,y,z]).T
-
-            hist, edges = np.histogramdd(pos, bins = grid_bins, range = [[-box_size/2, box_size/2]]*3)
-
-            hist_32 = hist.astype(np.float32)
-
-            # #pylians3 https://pylians3.readthedocs.io/en/master/construction.html
-
-            W_k = pylians_SL.FT_filter(box_size, smooth_R, grid_bins, smooth_type, 28)
-
-            hist_smoothed_32 = pylians_SL.field_smoothing(hist_32, W_k, 28)
-
-            #hist_smoothed_32[hist_smoothed_32 < 0] = 0
-            if clip_smoothed is not None:
-                hist_smoothed_32[hist_smoothed_32 < clip_smoothed] = 0
-
-        mass_log_msun = np.log10(pos.shape[0] * mass_dm * 1e10 / h)
-
-        result = {'hist':hist, 'hist_smoothed':hist_smoothed_32, 'edges':edges, 'pos':pos, 'pot':pot,  'haloid':haloid, 'mass_log_msun':mass_log_msun}
-
-        return result
+        del snap
 
 
+        #coords of max potential
+        max_pot = np.argmin(pot)
+        x_max = x[max_pot]
+        y_max = y[max_pot]
+        z_max = z[max_pot]
 
-    def make_2d_density(self,
-                        plane= 'xy',
-                        box_size = 500,
-                        grid_bins = 128,
-                        smooth_R = 5,
-                        smooth_type = 'Gaussian',
-                        clip_smoothed = 1e-5
-                        ):
-        
-        axis_to_proj = {'xy':2, 'xz':1, 'yz':0}
-        axis_to_proj = axis_to_proj[plane]
-        
-        haloid = self.haloid
+        #centering
+        x -= x_max
+        y -= y_max
+        z -= z_max
 
-        cutout_file = self.cutout_file
+        pos = np.array([x,y,z]).T
 
-        with h5py.File(cutout_file, 'r') as f:
-            x = f['PartType1']['Coordinates'][:,0] #units of [ckpc/h]
-            y = f['PartType1']['Coordinates'][:,1]
-            z = f['PartType1']['Coordinates'][:,2]
-            pot = f['PartType1']['Potential'][:]
-
-            #coords of max potential
-            max_pot = np.argmin(pot)
-            x_max = x[max_pot]
-            y_max = y[max_pot]
-            z_max = z[max_pot]
-
-            #centering
-            x -= x_max
-            y -= y_max
-            z -= z_max
-
-            pos = np.array([x,y,z]).T
-
-            hist, edges = np.histogramdd(pos, bins = grid_bins, range = [[-box_size/2, box_size/2]]*3)
-
-            hist = np.sum(hist, axis = axis_to_proj)
-
-            hist_32 = hist.astype(np.float32)
-
-            # #pylians3 https://pylians3.readthedocs.io/en/master/construction.html
-
-            W_k = pylians_SL.FT_filter_2D(box_size, smooth_R, grid_bins, smooth_type, 28)
-
-            hist_smoothed_32 = pylians_SL.field_smoothing_2D(hist_32, W_k, 28)
-
-            if clip_smoothed is not None:
-                hist_smoothed_32[hist_smoothed_32 < clip_smoothed] = 0
+        half_mass_rad = self.meta['SubhaloHalfmassRad']
 
 
-        mass_log_msun = np.log10(pos.shape[0] * mass_dm * 1e10 / h)
-
-        result = {'hist':hist, 'hist_smoothed':hist_smoothed_32, 'edges':edges, 'pos':pos, 'pot':pot,  'haloid':haloid, 'mass_log_msun':mass_log_msun}
-
-        return result
-
-
-    @staticmethod
-    def _plot_3d_density(dens_res):
-        hist = dens_res['hist']
-        hist_smoothed = dens_res['hist_smoothed']
-        edges = dens_res['edges']
+        is_in_units_of_halfmassrad = False
+        if box_half_size<0:
+            #if box__half_size<0, then the box is is in units of halfmassrad
+            assert -box_half_size < 10, 'box_half_size in units of half_mass_radius should be less than 10, usually 3-4'
+            box_half_size = -box_half_size*half_mass_rad
+            is_in_units_of_halfmassrad = True
 
 
-        #make 3x2 plots which are sum of 3d density along each axis, and unsmoothed/smoothed
+        edge_binsize = 2*box_half_size/grid_bins
+        box_range = [[-box_half_size, box_half_size]]*3
 
-        fig, axs = plt.subplots(3,2, figsize = (10,15))
+        hist, edges = np.histogramdd(pos, bins = grid_bins, range = box_range)
+
+        #TODO NOTE THAT float32 is used, so the values are not very precise
+        hist = hist.astype(np.float32)
+
+
+
+        # #pylians3 https://pylians3.readthedocs.io/en/master/construction.html
+
+        W_k = pylians_SL.FT_filter(2*box_half_size, smooth_R, grid_bins, smooth_type, 28)
+
+        hist_smoothed = pylians_SL.field_smoothing(hist, W_k, 28)
+
+        if clip_smoothed is not None:
+            hist_smoothed[hist_smoothed < clip_smoothed] = 0
+
+
+        projections_2d = {}
+        projections_2d_smoothed = {}
+        proj_name = ['yz', 'xz', 'xy']
 
         for axis_i in range(3):
-            for smooth_i in range(2):
-                if smooth_i == 0:
-                    map_2d = hist.sum(axis = axis_i).T
-                else:
-                    map_2d = hist_smoothed.sum(axis = axis_i).T
+            proj = proj_name[axis_i]
+            map_2d = hist.sum(axis = axis_i).T
+            map_2d_smoothed = hist_smoothed.sum(axis = axis_i).T
+
+            projections_2d[proj] = map_2d
+            projections_2d_smoothed[proj] = map_2d_smoothed
+
+        result = {
+                'hist':hist, 
+                'hist_smoothed':hist_smoothed, 
+                'edges':edges, 
+                'edge_binsize':edge_binsize,
+                'box_half_size': box_half_size,
+                'half_mass_rad':half_mass_rad,
+                'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
+                'projections':projections_2d,
+                'projections_smoothed':projections_2d_smoothed,
+                #'haloid':haloid, 
+                #'pos':pos, 'pot':pot, 
+                  }
+
+        return result
+
+
+
+
+
+    def plot_2d_density(self, dens_res,
+                        proj = 'xy',
+                        ax = None, 
+                        levels = [-5,-4,-3,-2,-1],
+                        smoothed = True):
+
+        map_2d = dens_res['projections_smoothed'][proj] if smoothed else dens_res['projections'][proj]
+
+        map_2d = np.log10(map_2d/np.nanmax(map_2d))
+
+        if ax is None:
+            f = plt.figure(figsize=(8, 8))
+            ax = f.add_axes([0.17, 0.02, 0.72, 0.79])
+            axcolor = f.add_axes([0.90, 0.02, 0.03, 0.79])
+
+        else:
+            #f = ax.figure
+            #ax = ax
+            axcolor = None
+
+
+        im = ax.imshow(map_2d, cmap='bone')
+        CS = ax.contour(map_2d, levels=[-5,-4,-3,-2,-1], cmap='Reds', linewidths=1.5)
+        ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
+
+        if axcolor:
+            #add colorbar similar to 
+            f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [density/max density]')
+        else:
+            None
                 
-                map_2d = np.log10(map_2d/np.nanmax(map_2d))
+        
+        edge_binsize = dens_res['edge_binsize']
 
-                ax = axs[axis_i, smooth_i]
+        #make ticks in physical units instead of bins number, zero is in the middle
+        ticks = np.linspace(-dens_res['box_half_size'], dens_res['box_half_size'], 5)
+        #ticks = np.round(ticks/edge_binsize, 1)
+        ticks = np.round(ticks, 1)
 
-                #im = ax.imshow(map_2d, cmap='bone', norm=LogNorm(vmin=0.01, vmax=5))
-                im = ax.imshow(map_2d, cmap='bone')
-                ax.contour(map_2d, levels=[-5,-4,-3,-2,-1], cmap='Reds', linewidths=1.5)
+        ax.set_xticks(np.linspace(0, map_2d.shape[0], 5))
+        ax.set_xticklabels(ticks)
+        ax.set_yticks(np.linspace(0, map_2d.shape[1], 5))
+        ax.set_yticklabels(ticks)
 
-                title_x = ['yz', 'xz', 'xy'][axis_i]
-                title_smooth = ['unsmoothed', 'smoothed'][smooth_i]
-                ax.set_title(f'{title_x} {title_smooth}')
+        ax.set_xlabel(f'{proj[0]} [ckpc/h]')
+        ax.set_ylabel(f'{proj[1]} [ckpc/h]')
+    
+    
 
-        #set title
-        fig.suptitle(f'3d density, halo {dens_res["haloid"]}')
-        plt.show()
+        label = f"ID {self.haloid}; logM {self.mass_log_msun:.2f} Msun/h; \n {proj} plane"
 
-
-        #make a plot with colorbar and levels of xy plane
-
-        f = figure(figsize=(12, 12))
-        ax = f.add_axes([0.17, 0.02, 0.72, 0.79])
-        axcolor = f.add_axes([0.90, 0.02, 0.03, 0.79])
-
-        map_2d = hist_smoothed.sum(axis = 2).T
-        map_2d = np.log10(map_2d/np.nanmax(map_2d))
-
-        #im = ax.imshow(map_2d, cmap='bone', norm=LogNorm(vmin=0.01, vmax=5))
-        im = ax.imshow(map_2d, cmap='bone')
-        levels = [-5,-4,-3,-2,-1]
-        CS = ax.contour(map_2d, levels=levels, cmap='Reds', linewidths=1.5)
-
-        ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
-
-        #f.colorbar(im, cax=axcolor, orientation='vertical')
-        f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [density/max density]')
-        ax.set_title(f'xy smoothed density, halo {dens_res["haloid"]}; logM {dens_res["mass_log_msun"]:.2f} Msun/h')
-        plt.show()
+        #set title inside, top left
+        ax.text(0.05, 0.95, label, transform=ax.transAxes, fontsize=12,
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
 
 
-    @staticmethod
-    def _plot_2d_density(dens_res):
-        hist_smoothed = dens_res['hist_smoothed']
+    def plot_mass_history(self, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+        
+        mass_history = self.mass_history
+        snap = mass_history['snap']
+        mass = mass_history['mass']
+        ax.plot(snap, mass)
+        ax.set_title(f'Mass history of halo {self.haloid}; logM {self.mass_log_msun:.2f} Msun/h')
+        ax.set_xlabel('snapshot')
+        ax.set_ylabel('mass [Msun/h]')
+        ax.set_yscale('log')
 
 
-        f = figure(figsize=(12, 12))
-        ax = f.add_axes([0.17, 0.02, 0.72, 0.79])
-        axcolor = f.add_axes([0.90, 0.02, 0.03, 0.79])
+    def plot_all(self, dens):
+        fig,  axs =  plt.subplots(2,2, figsize = (12,12))
+        ax1, ax2, ax3, ax4 = axs.flatten()
 
-        map_2d = hist_smoothed.T
-        map_2d = np.log10(map_2d/np.nanmax(map_2d))
+        self.plot_2d_density(dens, ax = ax1)
+        self.plot_2d_density(dens, ax = ax2, proj='xz')
+        self.plot_2d_density(dens, ax = ax3, proj='yz')
+        self.plot_mass_history(ax = ax4)
 
-        #im = ax.imshow(map_2d, cmap='bone', norm=LogNorm(vmin=0.01, vmax=5))
-        im = ax.imshow(map_2d, cmap='bone')
-        levels = [-5,-4,-3,-2,-1]
-        CS = ax.contour(map_2d, levels=levels, cmap='Reds', linewidths=1.5)
-
-        ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
-
-        #f.colorbar(im, cax=axcolor, orientation='vertical')
-        f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [density/max density]')
-        ax.set_title(f'projected smoothed density, halo {dens_res["haloid"]}; logM {dens_res["mass_log_msun"]:.2f} Msun/h')
-        plt.show()
+        self.plot_2d_density(dens)
 
 
-    @staticmethod
-    def _plot_2d_density_surface(dens_res, clip = -3):
-        hist_smoothed = dens_res['hist_smoothed']
-
-
-        map_2d = hist_smoothed.T
-        map_2d = np.log10(map_2d/np.nanmax(map_2d))
-
-        fig = plt.figure(figsize=(6, 6))
-        ax = fig.add_subplot(111, projection='3d')
-        x = np.arange(0, map_2d.shape[0])
-        y = np.arange(0, map_2d.shape[1])
-        X, Y = np.meshgrid(x, y)
-        Z = map_2d
-        #make -inf to 0
-        Z[Z==-np.inf] = np.nanmin(Z[Z!=-np.inf])
-
-        if clip is not None:
-            Z[Z < clip] = clip
-
-        ax.plot_surface(X, Y, Z, cmap='bone')
-
-
-        ax.set_title(f'projected smoothed density, halo {dens_res["haloid"]}; logM {dens_res["mass_log_msun"]:.2f} Msun/h')
-        plt.show()
-
-
-
-    # def make_mass_history(self):
-    #     sublink_file = self.sublink_file
-    #     with h5py.File(sublink_file, 'r') as f:
-    #         snap = f['SnapNum'][:]
-    #         mass = f['SubhaloMass'][:]
-    #         id = f['SubhaloID'][:]
-
-    #         id_0 = id[0]
-
-    #         #only id==id_0
-    #         mask = id == id_0
-    #         snap = snap[mask]
-    #         mass = mass[mask]
-
-    #         mass_dict = dict(zip(snap, mass))
-
-    #     return mass_dict
-
-
-
-    # def download_sublink(self, retry = True):
-    #     subhalo_url = self.halo_url
-
-    #     try:
-    #         halo_id = subhalo_url.split('/')[-2]
-    #         mass_hist_name = f'halo_{halo_id}_sublink.hdf5'
-    #         filepath = f'{data_path}/{mass_hist_name}'
-
-    #         if os.path.exists(filepath):
-    #             filesize = os.path.getsize(filepath)
-    #             print(f'{mass_hist_name} already exists, {filesize/1e6:.2f} MB')
-    #             return filepath
-            
-    #         t0 = time.time()
-
-    #         download_url = subhalo_url + 'sublink/full.hdf5'
-    #         print(f'Downloading cutout from {download_url}')
-    #         sublink = get(download_url)
-    #         t1 = time.time()
-    #         filesize = os.path.getsize(sublink)
-    #         print(f'Downloaded {mass_hist_name} in {t1-t0:.2f} s, {filesize/1e6:.2f} MB')
-    #         os.rename(sublink, filepath)
-    #         return filepath
-
-    #     except Exception as e:
-    #         print(f'Error downloading sublink {subhalo_url}, {e}')
-    #         if retry:
-    #             print(f'retrying...')
-    #             return self.download_sublink(retry = False)
-    #         else:
-    #             print(f'stopping')
-    #             return None

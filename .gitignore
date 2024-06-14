@@ -2,4 +2,9 @@
 *.npz
 simCLR_MNIST/models
 simCLR_MNIST/data
-data/
+#data
+tng_api_key.txt
+
+!data/subhalos_df.pkl
+!data/subhalos_history.pkl
+
