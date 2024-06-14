@@ -40,9 +40,12 @@ softening_dm_comoving = 1.0 #ckpc/h, https://www.tng-project.org/data/forum/topi
 #to get physical units from comoving:
 #physical = comoving * a / h, see task 6  rr *= scale_factor/little_h # ckpc/h -> physical kpc from https://www.tng-project.org/data/docs/api/
 
-subhalos_df = pd.read_pickle(data_path+'subhalos_df.pkl')
 subhalos_mass_history = pickle.load(open(data_path+'subhalos_history.pkl', 'rb'))
-
+try:
+    subhalos_df = pd.read_pickle(data_path+'subhalos_df.pkl')
+except:
+    #no idea why pickle is not working on Freya
+    subhalos_df = pd.read_csv(data_path+'subhalos_df.csv', index_col=0)
 
 
 
