@@ -49,6 +49,8 @@ except:
     #no idea why pickle is not working on Freya
     subhalos_df = pd.read_csv(data_path+'subhalos_df.csv', index_col=0)
 
+subhalos_df['logSubhaloMass'] = np.log10(subhalos_df['SubhaloMass']*1e10/h)
+
 
 
 def smooth_hist(hist, filter_size_pix = 2):
@@ -84,7 +86,6 @@ def get_subhalo_from_sim(subhaloID):
 
 
 
-
 class HaloInfo:
     def __init__(self, haloid):
         self.haloid = haloid
@@ -96,6 +97,14 @@ class HaloInfo:
 
         self.cutout_file = data_path + f'tng/halo_{haloid}_cutout.hdf5'
         self.sublink_file = data_path + f'tng/halo_{haloid}_sublink.hdf5'
+
+        self.freya_hist_file = data_path + f'freya/halo_{haloid}_hist.npz'
+        try:
+            hist_file = np.load(self.freya_hist_file)
+            self.hist_file = hist_file
+        except:
+            pass
+
 
         series = subhalos_df.loc[haloid]
         self.meta = series.to_dict()
@@ -181,70 +190,111 @@ class HaloInfo:
                         grid_bins = 64,
                         ):
         
-        haloid = self.haloid
+        if not self.freya_hist_file:
 
-        snap = self.get_snapshot()
-        x = snap['x']
-        y = snap['y']
-        z = snap['z']
-        pot = snap['pot']
+            snap = self.get_snapshot()
+            x = snap['x']
+            y = snap['y']
+            z = snap['z']
+            pot = snap['pot']
 
-        del snap
-
-
-        #coords of max potential
-        max_pot = np.argmin(pot)
-        x_max = x[max_pot]
-        y_max = y[max_pot]
-        z_max = z[max_pot]
-
-        #centering
-        x -= x_max
-        y -= y_max
-        z -= z_max
-
-        pos = np.array([x,y,z]).T
-
-        half_mass_rad = self.meta['SubhaloHalfmassRad']
+            del snap
 
 
-        is_in_units_of_halfmassrad = False
-        if box_half_size<0:
-            #if box__half_size<0, then the box is is in units of halfmassrad
-            assert -box_half_size < 10, 'box_half_size in units of half_mass_radius should be less than 10, usually 3-4'
+            #coords of max potential
+            max_pot = np.argmin(pot)
+            x_max = x[max_pot]
+            y_max = y[max_pot]
+            z_max = z[max_pot]
+
+            #centering
+            x -= x_max
+            y -= y_max
+            z -= z_max
+
+            pos = np.array([x,y,z]).T
+
+            half_mass_rad = self.meta['SubhaloHalfmassRad']
+
+
+            is_in_units_of_halfmassrad = False
+            if box_half_size<0:
+                #if box__half_size<0, then the box is is in units of halfmassrad
+                assert -box_half_size < 10, 'box_half_size in units of half_mass_radius should be less than 10, usually 3-4'
+                box_half_size = -box_half_size*half_mass_rad
+                is_in_units_of_halfmassrad = True
+
+
+            edge_binsize = 2*box_half_size/grid_bins
+            box_range = [[-box_half_size, box_half_size]]*3
+
+            hist, edges = np.histogramdd(pos, bins = grid_bins, range = box_range)
+
+            #TODO NOTE THAT float32 is used, so the values are not very precise
+            hist = hist.astype(np.float32)
+            #hist = hist.astype(np.int32)
+
+
+
+            projections_2d = {}
+            proj_name = ['yz', 'xz', 'xy']
+
+            for axis_i in range(3):
+                proj = proj_name[axis_i]
+                map_2d = hist.sum(axis = axis_i).T
+
+                projections_2d[proj] = map_2d
+
+            result = {
+                    'hist':hist, 
+                    'edges':edges, 
+                    'edge_binsize':edge_binsize,
+                    'box_half_size': box_half_size,
+                    'half_mass_rad':half_mass_rad,
+                    'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
+                    'projections':projections_2d,
+                    }
+
+        else:
+            print(f'Using precomputed histogram: {self.haloid}')
+            assert box_half_size == -5, 'box_half_size should be -5 for precomputed histograms'
+            assert grid_bins == 64, 'grid_bins should be 64 for precomputed histograms'
+
+            half_mass_rad = self.meta['SubhaloHalfmassRad']
+
+
+
+            hist_file = self.hist_file
+
+            #TODO add all keys of the result
+            hist = hist_file['hist']
             box_half_size = -box_half_size*half_mass_rad
             is_in_units_of_halfmassrad = True
 
+            edge_binsize = 2*box_half_size/grid_bins
+            
+            edges = np.linspace(-box_half_size, box_half_size, grid_bins+1)
 
-        edge_binsize = 2*box_half_size/grid_bins
-        box_range = [[-box_half_size, box_half_size]]*3
+            proj_yz = hist_file['proj_yz']
+            proj_xz = hist_file['proj_xz']
+            proj_xy = hist_file['proj_xy']
 
-        hist, edges = np.histogramdd(pos, bins = grid_bins, range = box_range)
+            projections_2d = {
+                'yz':proj_yz,
+                'xz':proj_xz,
+                'xy':proj_xy,
+            }
 
-        #TODO NOTE THAT float32 is used, so the values are not very precise
-        hist = hist.astype(np.float32)
-        #hist = hist.astype(np.int32)
+            result = {
+                    'hist':hist, 
+                    'edges':edges, 
+                    'edge_binsize':edge_binsize,
+                    'box_half_size': box_half_size,
+                    'half_mass_rad':half_mass_rad,
+                    'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
+                    'projections':projections_2d,
+            }
 
-
-
-        projections_2d = {}
-        proj_name = ['yz', 'xz', 'xy']
-
-        for axis_i in range(3):
-            proj = proj_name[axis_i]
-            map_2d = hist.sum(axis = axis_i).T
-
-            projections_2d[proj] = map_2d
-
-        result = {
-                'hist':hist, 
-                'edges':edges, 
-                'edge_binsize':edge_binsize,
-                'box_half_size': box_half_size,
-                'half_mass_rad':half_mass_rad,
-                'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
-                'projections':projections_2d,
-                }
 
         return result
 
@@ -326,16 +376,23 @@ class HaloInfo:
         ax.set_yscale('log')
 
 
-    def plot_all(self, dens):
-        fig,  axs =  plt.subplots(2,2, figsize = (12,12))
-        ax1, ax2, ax3, ax4 = axs.flatten()
+    def plot_all(self, dens, compact = False, smooth_size = 1):
+        if not compact:
+            fig,  axs =  plt.subplots(2,2, figsize = (12,12))
+            ax1, ax2, ax3, ax4 = axs.flatten()
 
-        self.plot_2d_density(dens, ax = ax1)
-        self.plot_2d_density(dens, ax = ax2, proj='xz')
-        self.plot_2d_density(dens, ax = ax3, proj='yz')
-        self.plot_mass_history(ax = ax4)
+            self.plot_2d_density(dens, ax = ax1, smooth_size = smooth_size)
+            self.plot_2d_density(dens, ax = ax2, proj='xz', smooth_size = smooth_size)
+            self.plot_2d_density(dens, ax = ax3, proj='yz', smooth_size = smooth_size)
+            self.plot_mass_history(ax = ax4)
 
-        self.plot_2d_density(dens)
+            self.plot_2d_density(dens)
 
-
+        else:
+            fig,  axs =  plt.subplots(1,2, figsize = (12,6))
+            ax1, ax2 = axs.flatten()
+            self.plot_2d_density(dens, ax = ax1, proj = 'xy' ,smooth_size = smooth_size)
+            self.plot_mass_history(ax = ax2)
+        
+        return fig, axs
 

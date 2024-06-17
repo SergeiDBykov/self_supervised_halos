@@ -23,10 +23,8 @@ for subhaloID in tqdm(subhalosIDs):
     halo_lowmass = HaloInfo(subhaloID)
     dens = halo_lowmass.make_3d_density(
                         box_half_size = -5,
-                        grid_bins = 64,
-                        smooth_R = 5,
-                        smooth_type = 'Gaussian',
-                        clip_smoothed = 1e-5)
+                        grid_bins = 64,)
+
 
     hist = dens['hist']
     savepath = data_path+'/freya/'
@@ -34,6 +32,18 @@ for subhaloID in tqdm(subhalosIDs):
     proj_yz = dens['projections']['yz']
     proj_xz = dens['projections']['xz']
     proj_xy = dens['projections']['xy']
+
+
+    #TODO add all keys of the result: 
+                # result = {
+                #     'hist':hist, 
+                #     'edges':edges, 
+                #     'edge_binsize':edge_binsize,
+                #     'box_half_size': box_half_size,
+                #     'half_mass_rad':half_mass_rad,
+                #     'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
+                #     'projections':projections_2d,
+                #     }
 
 
     np.savez(savepath+f'halo_{subhaloID}_hist.npz',
