@@ -1,5 +1,5 @@
 from utils.utils import rep_path, data_path, is_freya, sim_path
-from utils.data.tng_query import HaloInfo, subhalos_df
+from utils.data.tng import HaloInfo, subhalos_df
 
 
 import numpy as np
