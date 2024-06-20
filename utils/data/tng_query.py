@@ -256,7 +256,7 @@ class HaloInfo:
                     }
 
         else:
-            print(f'Using precomputed histogram: {self.haloid}')
+            #print(f'Using precomputed histogram: {self.haloid}')
             assert box_half_size == -5, 'box_half_size should be -5 for precomputed histograms'
             assert grid_bins == 64, 'grid_bins should be 64 for precomputed histograms'
 
@@ -294,27 +294,101 @@ class HaloInfo:
                     'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
                     'projections':projections_2d,
             }
+        
+        self.dens = result
 
 
         return result
 
 
 
+    def data_transform(self, dens = None, smooth = None):
+        def count_normalization(array):
+            array = array + 1 
+            array = array / np.max(array)
+            array = np.log10(array)
+            return array
+        
+
+        result = {}
+
+        if dens is None:
+            dens = self.make_3d_density()
+        
+        map_3d = dens['hist']
+        map_2d_xy = dens['projections']['xy']
+        map_2d_xz = dens['projections']['xz']
+        map_2d_yz = dens['projections']['yz']
+
+        if smooth:
+            map_2d_xy = smooth_hist(map_2d_xy, filter_size_pix=smooth)
+            map_2d_xz = smooth_hist(map_2d_xz, filter_size_pix=smooth)
+            map_2d_yz = smooth_hist(map_2d_yz, filter_size_pix=smooth)
+            map_3d = smooth_hist(map_3d, filter_size_pix=smooth)
+        
+        map_3d = count_normalization(map_3d)
+        map_2d_xy = count_normalization(map_2d_xy)
+        map_2d_xz = count_normalization(map_2d_xz)
+        map_2d_yz = count_normalization(map_2d_yz)
+
+
+        #mass history transform:
+        #need to always be of the same shape, starting with snapshot 0 and ending with 99
+
+        mass_history = self.mass_history
+        snapshot = np.array(mass_history['snap'])
+        mass = np.array(mass_history['mass'])
+
+        #snapshot = np.array(snapshot)/99
+        mass = mass / np.max(mass)
+        mass = np.log10(mass)
+
+        snapshot = snapshot[::-1]
+        mass = mass[::-1]
+
+
+        #the following is to make the mass history always have the same shape as needed for pytorch
+
+        new_snapshot = np.arange(100)
+        new_mass = np.full(100, np.nan)
+
+        mask = np.in1d(new_snapshot, snapshot)
+        new_mass[mask] = mass
+
+        new_snapshot = new_snapshot/99
+
+
+        result['map_3d'] = map_3d
+        result['map_2d_xy'] = map_2d_xy
+        result['map_2d_xz'] = map_2d_xz
+        result['map_2d_yz'] = map_2d_yz
+        #result['snapshot'] = snapshot
+        #result['mass_hist'] = mass
+        result['snapshot'] = new_snapshot
+        result['mass_hist'] = new_mass
+
+        return result
 
 
     def plot_2d_density(self, dens_res,
                         proj = 'xy',
                         ax = None, 
                         levels = [-5,-4,-3,-2,-1],
-                        smooth_size = 1):
+                        smooth_size = 1,
+                        cmap = 'afmhot'):
+        if dens_res is None:
+            dens_res = self.make_3d_density()
+
 
         map_2d = dens_res['projections'][proj]
 
         if smooth_size:
             map_2d = smooth_hist(map_2d, filter_size_pix=smooth_size)
 
+        map_2d = map_2d + 1.0
+        map_2d = map_2d / np.max(map_2d)
 
-        map_2d = np.log10(map_2d/np.nanmax(map_2d))
+        map_2d = np.log10(map_2d)
 
         if ax is None:
             f = plt.figure(figsize=(8, 8))
@@ -327,13 +401,13 @@ class HaloInfo:
             axcolor = None
 
 
-        im = ax.imshow(map_2d, cmap='bone')
-        CS = ax.contour(map_2d, levels=[-5,-4,-3,-2,-1], cmap='Reds', linewidths=1.5)
+        im = ax.imshow(map_2d, cmap=cmap)
+        CS = ax.contour(map_2d, levels=levels, cmap='Reds', linewidths=1.5)
         ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
 
         if axcolor:
             #add colorbar similar to 
-            f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [density/max density]')
+            f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [(1 + counts) / max]')
         else:
             None
                 
@@ -360,16 +434,19 @@ class HaloInfo:
         #set title inside, top left
         ax.text(0.05, 0.95, label, transform=ax.transAxes, fontsize=12,
                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+        
+    
+        return ax
 
 
     def plot_mass_history(self, ax=None):
         if ax is None:
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(1,1, figsize = (8,4))
         
         mass_history = self.mass_history
         snap = mass_history['snap']
         mass = mass_history['mass']
-        ax.plot(snap, mass)
+        ax.plot(snap, mass, '.-')
         ax.set_title(f'Mass history of halo {self.haloid}; logM {self.mass_log_msun:.2f} Msun/h')
         ax.set_xlabel('snapshot')
         ax.set_ylabel('mass [Msun/h]')
@@ -377,6 +454,9 @@ class HaloInfo:
 
 
     def plot_all(self, dens, compact = False, smooth_size = 1):
+        if dens is None:
+            dens = self.make_3d_density()
+
         if not compact:
             fig,  axs =  plt.subplots(2,2, figsize = (12,12))
             ax1, ax2, ax3, ax4 = axs.flatten()
@@ -395,4 +475,6 @@ class HaloInfo:
             self.plot_mass_history(ax = ax2)
         
         return fig, axs
+
+
 
