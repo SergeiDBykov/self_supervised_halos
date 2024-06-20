@@ -1,12 +1,14 @@
 import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
-
+from glob import glob
+from ..data.tng_query import subhalos_df
 
 #mass bins for classification
-bins = np.linspace(11, 14.7, 11)
 
 class HaloDataset(torch.utils.data.Dataset):
+    mass_bins = np.linspace(11, 14.7, 11)
+
     def __init__(self, root_dir, load_3d = False):
         self.root_dir = root_dir
         
@@ -31,7 +33,7 @@ class HaloDataset(torch.utils.data.Dataset):
         data_3d = data['map_3d'] 
 
         label_mass = subhalos_df.loc[halo_id]['logSubhaloMass']
-        label_class = np.digitize(label_mass, bins)
+        label_class = np.digitize(label_mass, self.mass_bins)
         label = (label_mass, label_class)
 
         del data
