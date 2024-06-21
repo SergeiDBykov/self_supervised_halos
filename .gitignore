@@ -2,6 +2,7 @@
 *.hdf5
 *.npz
 *.gz
+*.zip
 simCLR_MNIST/models
 simCLR_MNIST/data
 #data
