@@ -10,8 +10,8 @@
 #SBATCH -p p.gpu
 #SBATCH --gres=gpu:1
 
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=40
+# #SBATCH --nodes=1
+# #SBATCH --ntasks-per-node=40
 
 #SBATCH --mail-type=ALL 
 #SBATCH --mail-user=sdbykov@mpa-garching.mpg.de
@@ -24,5 +24,9 @@ module load anaconda/3/2021.11
 module load cuda/11.4 pytorch
 
 
-# Run the program:
-srun python3 ./freya_runs/check_gpu.py > ./freya_runs/check_gpu.out
+srun -p p.gpu --gres=gpu:1 \ 
+        --nodes=1 \
+        --time=3:00:00 \
+        --mail-type=ALL --mail-user=sdbykov@mpa-garching.mpg.de \
+        python3 ./freya_runs/check_gpu.py > ./freya_runs/check_gpu.out \
+
