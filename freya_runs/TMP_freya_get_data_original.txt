@@ -1,0 +1,28 @@
+# example https://docs.mpcdf.mpg.de/doc/computing/cobra-user-guide#slurm-example-batch-scripts
+
+
+#!/bin/bash -l
+# Standard output and error:
+#SBATCH -o ./tjob.out.%j
+#SBATCH -e ./tjob.err.%j
+# Initial working directory:
+#SBATCH -D ./self-supervised-halos
+# Job Name:
+#SBATCH -J freya_get_data
+#
+# Number of nodes and MPI tasks per node:
+#SBATCH --nodes=16
+#SBATCH --ntasks-per-node=40
+#
+#SBATCH --mail-type=ALL 
+#SBATCH --mail-user=sdbykov@mpa-garching.mpg.de
+#
+# Wall clock limit:
+#SBATCH --time=24:00:00
+
+module purge
+module load anaconda/3/2021.11
+
+
+# Run the program:
+srun ./freya_runs/freya_get_data.py > freya_get_data.out

@@ -15,11 +15,6 @@ import scipy.ndimage
 
 import illustris_python as il
 
-# if not is_freya:
-#     import MAS_library as pylians_MASL
-#     import smoothing_library as pylians_SL
-
-
 
 with open(rep_path+'/tng_api_key.txt', 'r') as f:
     api_key = f.read().strip()
@@ -52,30 +47,10 @@ except:
 subhalos_df['logSubhaloMass'] = np.log10(subhalos_df['SubhaloMass']*1e10/h)
 
 
-
 def smooth_hist(hist, filter_size_pix = 2):
     hist_filtered = scipy.ndimage.gaussian_filter(hist, filter_size_pix)
     return hist_filtered
     
-
-def get(path, params=None):
-    # make HTTP GET request to path
-    r = requests.get(path, params=params, headers=headers)
-
-    # raise exception if response code is not HTTP SUCCESS (200)
-    r.raise_for_status()
-
-    if r.headers['content-type'] == 'application/json':
-        return r.json() # parse json responses automatically
-
-    if 'content-disposition' in r.headers:
-        filename = r.headers['content-disposition'].split("filename=")[1]
-        with open(filename, 'wb') as f:
-            f.write(r.content)
-        return filename # return the filename string
-
-    return r
-
 
 def get_subhalo_from_sim(subhaloID):
     assert is_freya, 'This function is only for Freya'
@@ -98,12 +73,13 @@ class HaloInfo:
         self.cutout_file = data_path + f'tng/halo_{haloid}_cutout.hdf5'
         self.sublink_file = data_path + f'tng/halo_{haloid}_sublink.hdf5'
 
-        self.freya_hist_file = data_path + f'freya/halo_{haloid}_hist.npz'
+
+        self.hist_filepath = data_path + f'freya/halo_{haloid}_hist.npz'
         try:
-            hist_file = np.load(self.freya_hist_file)
+            hist_file = np.load(self.hist_filepath)
             self.hist_file = hist_file
         except:
-            pass
+            self.hist_file = None
 
 
         series = subhalos_df.loc[haloid]
@@ -117,68 +93,13 @@ class HaloInfo:
         return f'HaloInfo {self.haloid}; urls: {self.halo_url}'
 
 
-    #make download_halo_snapshot but as a method
-    def download_halo_snapshot(self, retry = True, verbose = True):
-        if is_freya:
-            raise Exception('Cannot download on Freya')
-
-        subhalo_url = self.halo_url
-        try:
-            halo_id = subhalo_url.split('/')[-2]
-            cutout_request = {'dm':'Coordinates,Potential'}
-            cutout_name = f'halo_{halo_id}_cutout.hdf5'
-            filepath = f'{data_path}/{cutout_name}'
-
-            if os.path.exists(filepath):
-                filesize = os.path.getsize(filepath)
-                if verbose:
-                    print(f'{cutout_name} already exists, {filesize/1e6:.2f} MB')
-                return filepath
-            
-            t0 = time.time()
-
-            download_url = subhalo_url + 'cutout.hdf5'
-            if verbose:
-                print(f'Downloading cutout from {download_url}')
-            cutout = get(download_url, cutout_request)
-            t1 = time.time()
-            filesize = os.path.getsize(cutout)
-            if verbose:
-                print(f'\t Downloaded for {self.haloid} finished in {t1-t0:.2f} s, {filesize/1e6:.2f} MB')
-            os.rename(cutout, filepath)
-            return filepath
-
-        except Exception as e:
-            if verbose: print(f'Error downloading {subhalo_url}, {e}')
-            if retry:
-                if verbose: print(f'retrying...')
-                return self.download_halo_snapshot(retry = False)
-            else:
-                if verbose: print(f'stopping')
-                return None
-
-
     def get_snapshot(self):
-        if not is_freya:
-            cutout_file = self.cutout_file
-            snap = {}
-            with h5py.File(cutout_file, 'r') as f:
-                x = f['PartType1']['Coordinates'][:,0] #units of [ckpc/h]
-                y = f['PartType1']['Coordinates'][:,1]
-                z = f['PartType1']['Coordinates'][:,2]
-                pot = f['PartType1']['Potential'][:]
-
-                snap['x'] = x
-                snap['y'] = y
-                snap['z'] = z
-                snap['pot'] = pot
-        
-        if is_freya:
-            snap = get_subhalo_from_sim(self.haloid)
-            snap['x'] = snap['Coordinates'][:,0]
-            snap['y'] = snap['Coordinates'][:,1]
-            snap['z'] = snap['Coordinates'][:,2]
-            snap['pot'] = snap['Potential']
+        assert is_freya, 'This function is only for Freya'
+        snap = get_subhalo_from_sim(self.haloid)
+        snap['x'] = snap['Coordinates'][:,0]
+        snap['y'] = snap['Coordinates'][:,1]
+        snap['z'] = snap['Coordinates'][:,2]
+        snap['pot'] = snap['Potential']
 
 
         return snap
@@ -190,8 +111,7 @@ class HaloInfo:
                         grid_bins = 64,
                         ):
         
-        if not self.freya_hist_file:
-
+        if not self.hist_file:
             snap = self.get_snapshot()
             x = snap['x']
             y = snap['y']
@@ -230,11 +150,8 @@ class HaloInfo:
 
             hist, edges = np.histogramdd(pos, bins = grid_bins, range = box_range)
 
-            #TODO NOTE THAT float32 is used, so the values are not very precise
+            #TODO note that float32 is used, so the values are not very precise
             hist = hist.astype(np.float32)
-            #hist = hist.astype(np.int32)
-
-
 
             projections_2d = {}
             proj_name = ['yz', 'xz', 'xy']
@@ -254,27 +171,14 @@ class HaloInfo:
                     'is_in_units_of_halfmassrad':is_in_units_of_halfmassrad, 
                     'projections':projections_2d,
                     }
+            
+            self.dens = result
 
         else:
             #print(f'Using precomputed histogram: {self.haloid}')
-            assert box_half_size == -5, 'box_half_size should be -5 for precomputed histograms'
-            assert grid_bins == 64, 'grid_bins should be 64 for precomputed histograms'
-
-            half_mass_rad = self.meta['SubhaloHalfmassRad']
-
-
-
             hist_file = self.hist_file
 
-            #TODO add all keys of the result
             hist = hist_file['hist']
-            box_half_size = -box_half_size*half_mass_rad
-            is_in_units_of_halfmassrad = True
-
-            edge_binsize = 2*box_half_size/grid_bins
-            
-            edges = np.linspace(-box_half_size, box_half_size, grid_bins+1)
-
             proj_yz = hist_file['proj_yz']
             proj_xz = hist_file['proj_xz']
             proj_xy = hist_file['proj_xy']
@@ -284,6 +188,12 @@ class HaloInfo:
                 'xz':proj_xz,
                 'xy':proj_xy,
             }
+
+            edges = hist_file['edges']
+            edge_binsize = hist_file['edge_binsize']
+            box_half_size = hist_file['box_half_size']
+            half_mass_rad = hist_file['half_mass_rad']
+            is_in_units_of_halfmassrad = hist_file['is_in_units_of_halfmassrad']
 
             result = {
                     'hist':hist, 
@@ -362,8 +272,6 @@ class HaloInfo:
         result['map_2d_xy'] = map_2d_xy
         result['map_2d_xz'] = map_2d_xz
         result['map_2d_yz'] = map_2d_yz
-        #result['snapshot'] = snapshot
-        #result['mass_hist'] = mass
         result['snapshot'] = new_snapshot
         result['mass_hist'] = new_mass
 
