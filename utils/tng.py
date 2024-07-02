@@ -1,4 +1,7 @@
-from ..utils import rep_path, data_path, is_freya, sim_path
+import importlib
+module_utils = importlib.import_module("self-supervised-halos.utils")
+rep_path, data_path, is_freya, sim_path = module_utils.rep_path, module_utils.data_path, module_utils.is_freya, module_utils.sim_path
+
 
 import requests
 import numpy as np
