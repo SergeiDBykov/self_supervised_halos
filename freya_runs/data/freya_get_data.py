@@ -1,13 +1,9 @@
-#from utils.utils import rep_path, data_path, is_freya, sim_path
-#from utils.data.tng import HaloInfo, subhalos_df
+import self_supervised_halos.utils.tng as tng
+HaloInfo = tng.HaloInfo
+subhalos_df = tng.subhalos_df
 
-import importlib
-module_tng = importlib.import_module("self-supervised-halos.utils.data.tng")
-HaloInfo = module_tng.HaloInfo
-subhalos_df = module_tng.subhalos_df
-
-module_utils = importlib.import_module("self-supervised-halos.utils.utils")
-rep_path, data_path, is_freya, sim_path = module_utils.rep_path, module_utils.data_path, module_utils.is_freya, module_utils.sim_path
+import self_supervised_halos.utils.utils as utils
+rep_path, data_path, is_freya, sim_path = utils.rep_path, utils.data_path, utils.is_freya, utils.sim_path
 
 
 import numpy as np

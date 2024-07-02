@@ -1,6 +1,6 @@
 import importlib
-module_utils = importlib.import_module("self-supervised-halos.utils")
-rep_path, data_path, is_freya, sim_path = module_utils.rep_path, module_utils.data_path, module_utils.is_freya, module_utils.sim_path
+from self_supervised_halos import utils
+rep_path, data_path, is_freya, sim_path = utils.rep_path, utils.data_path, utils.is_freya, utils.sim_path
 
 
 import requests

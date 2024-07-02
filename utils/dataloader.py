@@ -10,10 +10,9 @@ import torchvision.transforms.functional as TF
 from torch.utils.data import TensorDataset, DataLoader
 
 
-#from ..data.tng import subhalos_df
-import importlib
-module_tng = importlib.import_module("self-supervised-halos.utils.tng")
-subhalos_df = module_tng.subhalos_df
+import self_supervised_halos.utils.tng as tng
+from self_supervised_halos.utils.tng import subhalos_df
+
 
 
 mass_bins = np.linspace(11, 14.7, 11) ## number of classes = len(mass_bins) - 1 = 10
@@ -61,7 +60,6 @@ class HaloDataset(torch.utils.data.Dataset):
         load_mass = self.load_mass
 
         data_dict = {}
-
 
         data_dict_3d = {}
         data_dict_mass = {}
@@ -211,3 +209,5 @@ img2d_transform= transforms.Compose([
     transforms.RandomRotation(degrees=180, fill=-np.inf),
     FillInfWithMin(fill_value=-np.inf)  # Custom transform to fill -inf with min per image
 ])
+
+
