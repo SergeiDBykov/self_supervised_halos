@@ -78,8 +78,10 @@ class BaseModel:
                 current_lr = self.optimizer.param_groups[0]['lr']
             self.history['learning_rate'].append(current_lr)
 
-    def save(self, epoch, loss):
+    def save(self):
         filename = models_path + self.model.__class__.__name__ + '.pth'
+        epoch = len(self.history['train_loss'])
+        loss = self.history['train_loss'][-1]
         torch.save({
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),

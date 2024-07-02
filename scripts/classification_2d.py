@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
+import matplotlib.pyplot as plt
 
 
 from self_supervised_halos.scripts.base_model import BaseModel
@@ -53,7 +54,11 @@ class ClassificationModel(BaseModel):
                 history=None
                  ):
         model = Classification_2d()
-        super().__init__(model, optimizer_params=optimizer_params, scheduler_params=scheduler_params)
+        super().__init__(model, 
+                        optimizer_class = optimizer_class, 
+                        optimizer_params=optimizer_params,
+                        scheduler_class = scheduler_class,
+                        scheduler_params=scheduler_params)
         self.criterion = criterion
 
     def forward(self, x):
@@ -75,7 +80,7 @@ class ClassificationModel(BaseModel):
 
 
 
-def report_classification_performance(model, dataloader, device='cpu'):
+def report_classification_performance(model, dataloader, device='cpu', viz_one = False):
     model.model.eval()
 
     all_preds = []
@@ -92,6 +97,20 @@ def report_classification_performance(model, dataloader, device='cpu'):
             batch_label = targets[1].to(device)
 
             pred_class = model(image)
+
+
+            if viz_one:
+                n_img_to_plots = 3
+                fig, ax = plt.subplots(1, n_img_to_plots, figsize=(10, 5))
+                for i in range(n_img_to_plots):
+                    img_input = image[i].cpu().numpy()
+                    img_input = np.squeeze(img_input)
+                    logmass = halo_mass[i].cpu().numpy()
+                    ax[i].imshow(img_input, cmap='afmhot')
+                    ax[i].set_title(f"True: {batch_label[i]}, Pred: {torch.argmax(pred_class[i])}; Mass: {logmass:.1f}", fontsize=10)
+                return None
+
+
 
             all_preds.append(pred_class)
             all_labels.append(batch_label)

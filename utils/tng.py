@@ -216,10 +216,17 @@ class HaloInfo:
 
 
     def data_transform(self, dens = None, smooth = None):
+        # def count_normalization(array):
+        #     array = array + 1 
+        #     array = array / np.max(array)
+        #     array = np.log10(array)
+        #     return array
+        
         def count_normalization(array):
-            array = array + 1 
-            array = array / np.max(array)
-            array = np.log10(array)
+            array = np.log10(array + 1)
+            array_min = np.min(array)
+            array_max = np.max(array)
+            array = (array - array_min) / (array_max - array_min)
             return array
         
 
