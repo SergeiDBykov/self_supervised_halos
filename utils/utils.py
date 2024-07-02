@@ -8,6 +8,10 @@ import seaborn as sns
 import os 
 import sys
 
+import torch
+import time
+
+
 
 is_freya = True if 'freya' in os.uname().nodename else False
 
@@ -110,3 +114,27 @@ def set_mpl(palette = 'pastel', desat = 0.8):
         sns.set_palette(palette, color_codes = True, desat = desat)
     print('matplotlib settings set')
 set_mpl()
+
+
+
+
+def check_cuda():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if is_freya:
+        print('working of Freya:', os.uname().nodename)
+
+    # Check if CUDA is available
+    cuda_available = torch.cuda.is_available()
+
+    if cuda_available:
+        num_gpus = torch.cuda.device_count()
+        gpu_names = [torch.cuda.get_device_name(i) for i in range(num_gpus)]
+        print(f"CUDA is available. Number of GPUs: {num_gpus}")
+        for idx, name in enumerate(gpu_names):
+            print(f"GPU {idx}: {name}")
+    else:
+        print("CUDA is not available.")
+
+    print(f"Device: {device}")
+
+    return device

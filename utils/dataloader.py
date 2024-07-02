@@ -26,7 +26,9 @@ mass_bins_weights = torch.tensor(mass_bins_weights, dtype=torch.float32)
 
 
 class HaloDataset(torch.utils.data.Dataset):
-    mass_bins = np.linspace(11, 14.7, 11)  # Define mass_bins globally or pass as argument
+    #mass_bins = np.linspace(11, 14.7, 11)  # Define mass_bins globally or pass as argument
+    mass_bins = mass_bins
+    mass_bins_weights = mass_bins_weights
 
     def __init__(self, root_dir, subhalos_df,
                  load_2d=True, load_3d=False, load_mass=False,
