@@ -27,7 +27,7 @@ else:
 
 
 data_path = f'{rep_path}/data/'
-data_postprocess_path = f'{data_path}/freya_postprocess/'
+data_preprocess_path = f'{data_path}/freya_preprocess/'
 
 res_path = f'{rep_path}/results/'
 
