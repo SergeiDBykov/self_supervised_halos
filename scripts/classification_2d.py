@@ -51,7 +51,8 @@ class ClassificationModel(BaseModel):
                 scheduler_class=torch.optim.lr_scheduler.StepLR,
                 scheduler_params={},
                 criterion=None, 
-                history=None
+                history=None,
+                transform = None,
                  ):
         model = Classification_2d()
         super().__init__(model, 
@@ -60,6 +61,8 @@ class ClassificationModel(BaseModel):
                         scheduler_class = scheduler_class,
                         scheduler_params=scheduler_params)
         self.criterion = criterion
+        self.history = history
+        self.transform = transform
 
     def forward(self, x):
         return self.model(x)
@@ -69,6 +72,9 @@ class ClassificationModel(BaseModel):
         inputs = inputs[0]
         targets = targets[1]
         inputs, targets = inputs.to(device), targets.to(device)
+        if self.transform:
+            inputs = self.transform(inputs)
+
         outputs = self.model(inputs)
         loss = self.criterion(outputs, targets)
 
@@ -77,6 +83,43 @@ class ClassificationModel(BaseModel):
             print(f"Outputs shape: {outputs.shape}")
 
         return loss
+
+    def show_transforms(self, dataloader, device):
+        self.model.eval()
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc="Trial Forward Pass"):
+                inputs, targets = batch
+                inputs = inputs[0].to(device)
+                targets = targets[1].to(device)
+                if self.transform:
+                    inputs_transformed = self.transform(inputs)
+                else:
+                    print("No transform provided. Showing original images.")
+                    inputs_transformed = inputs
+
+                outputs_transformed = self.model(inputs_transformed)
+                outputs = self.model(inputs)
+
+                n_img_to_plots = 3
+                fig, ax = plt.subplots(2, n_img_to_plots, figsize=(10, 5))
+                for i in range(n_img_to_plots):
+                    pred_class = torch.argmax(outputs[i])
+                    pred_class_transformed = torch.argmax(outputs_transformed[i])
+                    img_input = inputs[i].cpu().numpy()
+                    img_input = np.squeeze(img_input)
+                    img_transformed = inputs_transformed[i].cpu().numpy()
+                    img_transformed = np.squeeze(img_transformed)
+                    ax[0, i].imshow(img_input, cmap='afmhot')
+                    ax[0, i].set_title(f"INPUT: True: {targets[i]}, Pred: {pred_class}", fontsize=10)
+                    ax[1, i].imshow(img_transformed, cmap='afmhot')
+                    ax[1, i].set_title(f"TRANSFORMED: True: {targets[i]}, Pred: {pred_class_transformed}", fontsize=10)
+                    #remove axis
+                    ax[0, i].axis('off')
+                    ax[1, i].axis('off')
+
+                plt.show()
+                return inputs,inputs_transformed
+
 
 
 

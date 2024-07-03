@@ -41,6 +41,11 @@ class BaseModel:
                 if limit_to_first_batch: break
 
 
+    def show_transforms(self, dataloader, device):
+        raise NotImplementedError("Show transforms not implemented")
+
+
+
     def __call__(self, x):
         return self.forward(x)
 
@@ -94,7 +99,12 @@ class BaseModel:
 
     def load(self, filename):
         filename = models_path + filename
-        checkpoint = torch.load(filename)
+        try:
+            checkpoint = torch.load(filename)
+        except FileNotFoundError:
+            print(f"Model {self.model.__class__.__name__}
+            not found at {filename}")
+
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if self.scheduler:
