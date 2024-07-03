@@ -30,7 +30,6 @@ class Classification_2d(nn.Module):
             nn.Conv2d(32, 64, kernel_size=2, stride=2),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-
             nn.Flatten()
         )
         self.fc = nn.Sequential(
@@ -61,7 +60,7 @@ class ClassificationModel(BaseModel):
                         scheduler_class = scheduler_class,
                         scheduler_params=scheduler_params)
         self.criterion = criterion
-        self.history = history
+        self.history = history if history else {'train_loss': [], 'val_loss': [], 'learning_rate': []}
         self.transform = transform
 
     def forward(self, x):

@@ -55,7 +55,8 @@ class BaseModel:
         for epoch in tqdm(range(num_epochs), desc="Epochs"):
             self.model.train()  # Set the model to training mode
             train_loss = 0
-            for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} Training"):
+            #for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} Training"):
+            for batch in train_loader:
                 loss = self.training_step(batch, device)
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -102,8 +103,9 @@ class BaseModel:
         try:
             checkpoint = torch.load(filename)
         except FileNotFoundError:
-            print(f"Model {self.model.__class__.__name__}
-            not found at {filename}")
+            print(f"Model {self.model.__class__.__name__} not found at {filename}")
+            return None
+
 
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
