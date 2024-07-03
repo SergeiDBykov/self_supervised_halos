@@ -185,31 +185,38 @@ class HaloDataset(torch.utils.data.Dataset):
         return result_tuple, label
 
 
+##this  was an important class then I used no minmax scaling of log(1+counts). Now it is not needed and we can fill rotated images with 0
+# class FillInfWithMin:
+#     def __init__(self, fill_value=-np.inf):
+#         self.fill_value = fill_value
 
-class FillInfWithMin:
-    def __init__(self, fill_value=-np.inf):
-        self.fill_value = fill_value
+#     def __call__(self, batch):
+#         # Create a mask to identify non-inf values
+#         mask = batch != self.fill_value
 
-    def __call__(self, batch):
-        # Create a mask to identify non-inf values
-        mask = batch != self.fill_value
+#         # Compute the minimum value per image, ignoring -inf values
+#         min_per_image = torch.where(mask, batch, torch.inf).view(batch.size(0), -1).min(dim=1)[0]
 
-        # Compute the minimum value per image, ignoring -inf values
-        min_per_image = torch.where(mask, batch, torch.inf).view(batch.size(0), -1).min(dim=1)[0]
+#         # Reshape min_per_image to match the dimensions of batch
+#         min_per_image = min_per_image.view(batch.size(0), 1, 1, 1)
 
-        # Reshape min_per_image to match the dimensions of batch
-        min_per_image = min_per_image.view(batch.size(0), 1, 1, 1)
+#         # Replace -inf values with the corresponding minimum values
+#         filled_batch = torch.where(batch == self.fill_value, min_per_image, batch)
 
-        # Replace -inf values with the corresponding minimum values
-        filled_batch = torch.where(batch == self.fill_value, min_per_image, batch)
+#         return filled_batch
 
-        return filled_batch
+
+# img2d_transform= transforms.Compose([
+#     transforms.RandomResizedCrop(size=(64, 64), scale=(0.7, 0.99)),
+#     transforms.RandomRotation(degrees=180, fill=-np.inf),
+#     FillInfWithMin(fill_value=-np.inf)  # Custom transform to fill -inf with min per image
+# ])
+
 
 
 img2d_transform= transforms.Compose([
     transforms.RandomResizedCrop(size=(64, 64), scale=(0.7, 0.99)),
-    transforms.RandomRotation(degrees=180, fill=-np.inf),
-    FillInfWithMin(fill_value=-np.inf)  # Custom transform to fill -inf with min per image
+    transforms.RandomRotation(degrees=180, fill=0.0),
 ])
 
 
