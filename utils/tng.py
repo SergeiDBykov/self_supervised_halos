@@ -214,21 +214,23 @@ class HaloInfo:
         return result
 
 
+    @staticmethod
+    def count_normalization(array):
+        array = np.log10(array + 1)
+        array_min = np.min(array)
+        array_max = np.max(array)
+        array = (array - array_min) / (array_max - array_min)
+        return array
 
-    def data_transform(self, dens = None, smooth = None):
-        # def count_normalization(array):
+    #used to be log10 norm without min/max scaling
+    #@staticmethod
+    # def count_normalization(array):
         #     array = array + 1 
         #     array = array / np.max(array)
         #     array = np.log10(array)
-        #     return array
-        
-        def count_normalization(array):
-            array = np.log10(array + 1)
-            array_min = np.min(array)
-            array_max = np.max(array)
-            array = (array - array_min) / (array_max - array_min)
-            return array
-        
+        #     return array 
+
+    def data_transform(self, dens = None, smooth = None):        
 
         result = {}
 
@@ -246,10 +248,10 @@ class HaloInfo:
             map_2d_yz = smooth_hist(map_2d_yz, filter_size_pix=smooth)
             map_3d = smooth_hist(map_3d, filter_size_pix=smooth)
         
-        map_3d = count_normalization(map_3d)
-        map_2d_xy = count_normalization(map_2d_xy)
-        map_2d_xz = count_normalization(map_2d_xz)
-        map_2d_yz = count_normalization(map_2d_yz)
+        map_3d = self.count_normalization(map_3d)
+        map_2d_xy = self.count_normalization(map_2d_xy)
+        map_2d_xz = self.count_normalization(map_2d_xz)
+        map_2d_yz = self.count_normalization(map_2d_yz)
 
 
         #mass history transform:
@@ -303,10 +305,7 @@ class HaloInfo:
         if smooth_size:
             map_2d = smooth_hist(map_2d, filter_size_pix=smooth_size)
 
-        map_2d = map_2d + 1.0
-        map_2d = map_2d / np.max(map_2d)
-
-        map_2d = np.log10(map_2d)
+        map_2d = self.count_normalization(map_2d)
 
         if ax is None:
             f = plt.figure(figsize=(8, 8))

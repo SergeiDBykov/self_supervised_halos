@@ -55,9 +55,8 @@ for subhaloID in tqdm(subhalosIDs):
                                         )
 
 
-#### 14 JUNE 2025: approx 1h11m for 64 bins and all 16544, disk usage du -sh freya/ = 18gb
-#### 28 JUNE 2025: around the same but with all bin edges and so on.
-#tarred 14 june:
-#tar czf histograms_freya_14june.tar.gz freya/ 
-# -> disk usage, approx 10-20 min, 353 mb
-
+#cd to data/freya and tar the files tar czf histograms_freya_14june.tar.gz freya/ 
+os.chdir(data_path+'/')
+print('Zipping the files...')
+os.system('tar czf histograms_freya.tar.gz freya/') #10-20 min, 353 mb
+print('Done')
