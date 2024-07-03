@@ -20,6 +20,13 @@ import pickle
 preprocess_path = data_path+'/freya_preprocess/'
 save_3d = True
 
+if not os.path.exists(preprocess_path):
+    os.makedirs(preprocess_path)
+    os.makedirs(preprocess_path+'/2d')
+    os.makedirs(preprocess_path+'/3d')
+    os.makedirs(preprocess_path+'/mass')
+
+
 for id in tqdm(subhalos_df.index): #3 min for saving without 3d data, 4 min for saving with 3d data. On freya: ~20 min saving with 3d (not srun but jupyter)
     halo = HaloInfo(id)
     halo.make_3d_density()

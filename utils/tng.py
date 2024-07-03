@@ -293,7 +293,7 @@ class HaloInfo:
     def plot_2d_density(self, dens_res,
                         proj = 'xy',
                         ax = None, 
-                        levels = [-5,-4,-3,-2,-1],
+                        levels = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0],
                         smooth_size = 1,
                         cmap = 'afmhot'):
         if dens_res is None:
@@ -320,11 +320,11 @@ class HaloInfo:
 
         im = ax.imshow(map_2d, cmap=cmap)
         CS = ax.contour(map_2d, levels=levels, cmap='Reds', linewidths=1.5)
-        ax.clabel(CS, CS.levels, inline=True, fmt='%1.0f', fontsize=10)
+        ax.clabel(CS, CS.levels, inline=True, fmt='%1.1f', fontsize=10)
 
         if axcolor:
             #add colorbar similar to 
-            f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [(1 + counts) / max]')
+            f.colorbar(im, cax=axcolor, orientation='vertical', ticks = levels, label = 'log10 [1 + counts] minmax scaled')
         else:
             None
                 

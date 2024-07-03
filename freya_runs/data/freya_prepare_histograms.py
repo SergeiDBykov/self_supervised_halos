@@ -22,6 +22,9 @@ import illustris_python as il
 subhalosIDs = list(subhalos_df.index.values)[::-1]
 
 
+
+
+
 for subhaloID in tqdm(subhalosIDs):
     halo_lowmass = HaloInfo(subhaloID)
     dens = halo_lowmass.make_3d_density(
