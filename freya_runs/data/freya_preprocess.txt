@@ -1,4 +1,1 @@
-module purge
-module load anaconda/3/2021.11
-
 srun python3 ./freya_runs/data/freya_preprocess.py > ./freya_runs/data/freya_preprocess.out
