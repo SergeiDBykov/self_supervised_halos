@@ -82,6 +82,7 @@ class HaloMassHistTransformer(nn.Module):
         x = self.transformer(x, src_key_padding_mask=src_key_padding_mask)
         x = x.permute(1, 0, 2)  # (batch_size, seq_len, embed_dim)
         x = self.fc_out(x)  # (batch_size, seq_len, output_dim)
+        x = x.squeeze(-1) # remove last dimension
         return x
 
 
@@ -99,19 +100,20 @@ class RegressionModel(BaseModel):
                  ):
         model = HaloMassHistTransformer()
         super().__init__(model, 
-                        optimizer_class = optimizer_class
+                        optimizer_class = optimizer_class,
                         optimizer_params=optimizer_params,
-                        scheduler_class = scheduler
+                        scheduler_class = scheduler_class,
                         scheduler_params=scheduler_params)
         self.criterion = criterion
         self.history = history if history else {'train_loss': [], 'val_loss': [], 'learning_rate': []}
+        self.transform = transform
 
     def forward(self, x):
         return self.model(x)
     
     def training_step(self, batch, device, verbose = False):
         inputs, targets = batch
-        time_series = inputs[0][2].to(device)
+        time_series = inputs[2].to(device)
         time_series = time_series.float()
 
 
@@ -126,7 +128,7 @@ class RegressionModel(BaseModel):
 
         # Forward pass
         predictions = self.model(masked_signal_filled, src_key_padding_mask=src_key_padding_mask)
-        predictions = predictions.squeeze(-1) # remove last dimension
+        #predictions = predictions.squeeze(-1) # remove last dimension
 
         loss = self.criterion(predictions[prediction_mask], unmasked_signal[prediction_mask])
 
@@ -136,15 +138,15 @@ class RegressionModel(BaseModel):
         return loss
 
 
-    def show_transforms(self, dataloader, device):
+    def show_transforms(self, dataloader, device, plot_n=2):
         self.model.eval()
         with torch.no_grad():
             for batch in tqdm(dataloader, desc="Trial Forward Pass"):
-                inputs, targets = batch
-                time_series = inputs[0][2].to(device)
+                inputs, _ = batch
+                time_series = inputs[2].to(device)
                 time_series = time_series.float()
                 if self.transform:
-                    unmasked_signal, masked_signal, prediction_mask = self.transform(inputs)
+                    unmasked_signal, masked_signal, prediction_mask = self.transform(time_series)
                 else:
                     raise NotImplementedError("Transform not implemented")
                         
@@ -153,19 +155,19 @@ class RegressionModel(BaseModel):
                 src_key_padding_mask = torch.isnan(masked_signal)
 
                 predictions = self.model(masked_signal_filled, src_key_padding_mask=src_key_padding_mask)
+                #predictions = predictions.squeeze(-1)
                 
                 
-                n_img_to_plots = 3
-                fig, ax = plt.subplots(1, n_img_to_plots, figsize=(10, 10))
-                for i in range(n_img_to_plots):
+                fig, ax = plt.subplots(1, plot_n, figsize=(15, 5))
+                for i in range(plot_n):
                     #plot masked input
                     input_masked = masked_signal[i].cpu().numpy()
-                    predictions = predictions[i].cpu().numpy()
+                    pred = predictions[i].cpu().numpy()
                     input_all = time_series[i].cpu().numpy()
 
-                    ax[i].plot(input_masked,  'r--', lw = 1, alpha = 0.5, label='Masked Input')
-                    ax[i].plot(predictions,  'g-', lw = 1, alpha = 0.5, label='Predictions')
-                    ax[i].plot(input_all, 'k:', lw = 1, alpha = 0.5,label='All')
-
+                    ax[i].plot(input_masked,  'r--', lw = 6, alpha = 0.3, label='Masked Input')
+                    ax[i].plot(pred,  'g-', lw = 3, alpha = 0.5, label='Predictions')
+                    ax[i].plot(input_all, 'k:', lw = 3, alpha = 0.5,label='Truth')
+                    ax[i].legend()
                 plt.show()
-                return inputs
+                return None

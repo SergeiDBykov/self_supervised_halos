@@ -30,7 +30,7 @@ class BaseModel:
     def forward(self, x):
         raise NotImplementedError("Forward method not implemented")
 
-    def training_step(self, batch, device):
+    def training_step(self, batch, device, verbose=False):
         raise NotImplementedError("Training step not implemented")
 
     def trial_forward_pass(self, dataloader, device, limit_to_first_batch=True):
@@ -73,7 +73,8 @@ class BaseModel:
                 self.model.eval()  # Set the model to evaluation mode
                 val_loss = 0
                 with torch.no_grad():
-                    for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} Validation"):
+                    #for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} Validation"):
+                    for batch in val_loader:
                         loss = self.training_step(batch, device)
                         val_loss += loss.item()
                 avg_val_loss = val_loss / len(val_loader)
