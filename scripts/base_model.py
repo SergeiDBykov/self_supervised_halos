@@ -36,9 +36,12 @@ class BaseModel:
     def trial_forward_pass(self, dataloader, device, limit_to_first_batch=True):
         self.model.eval()
         with torch.no_grad():
-            for batch in tqdm(dataloader, desc="Trial Forward Pass"):
-                self.training_step(batch, device, verbose=True)
+            t0 = time.time()
+            for batch in tqdm(dataloader, desc=f"Trial Forward Pass {limit_to_first_batch=}"):
+                self.training_step(batch, device, verbose=limit_to_first_batch)
                 if limit_to_first_batch: break
+            t1 = time.time()
+            print(f"Trial forward pass elapsed time: {t1-t0:.2f} s ({limit_to_first_batch=})")
 
 
     def show_transforms(self, dataloader, device):

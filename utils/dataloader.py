@@ -9,6 +9,8 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 from torch.utils.data import TensorDataset, DataLoader
 
+import torchio as tio #pip install torchio, for 3d data augmentation
+import random #for 3d data augmentation
 
 import self_supervised_halos.utils.tng as tng
 from self_supervised_halos.utils.tng import subhalos_df
@@ -204,8 +206,6 @@ class HaloDataset(torch.utils.data.Dataset):
 #         filled_batch = torch.where(batch == self.fill_value, min_per_image, batch)
 
 #         return filled_batch
-
-
 # img2d_transform= transforms.Compose([
 #     transforms.RandomResizedCrop(size=(64, 64), scale=(0.7, 0.99)),
 #     transforms.RandomRotation(degrees=180, fill=-np.inf),
@@ -220,3 +220,58 @@ img2d_transform= transforms.Compose([
 ])
 
 
+
+# Define the 3D transformations, via chatgpt
+def random_resized_crop_3d(image, output_size, scale=(0.7, 0.99)):
+    # Get the input size
+    input_size = image.shape
+    
+    # Compute the crop size
+    crop_size = [int(s * random.uniform(scale[0], scale[1])) for s in input_size]
+    
+    # Ensure the crop size is at least the output size
+    crop_size = [max(cs, os) for cs, os in zip(crop_size, output_size)]
+    
+    # Randomly select the crop start point
+    crop_start = [random.randint(0, input_size[i] - crop_size[i]) for i in range(len(input_size))]
+    
+    # Perform the crop
+    cropped_image = image[
+        crop_start[0]:crop_start[0] + crop_size[0],
+        crop_start[1]:crop_start[1] + crop_size[1],
+        crop_start[2]:crop_start[2] + crop_size[2]
+    ]
+    
+    # Resize the cropped image to the output size
+    resize_transform = tio.Rescale((output_size[0] / crop_size[0], 
+                                    output_size[1] / crop_size[1], 
+                                    output_size[2] / crop_size[2]))
+    
+    resized_image = resize_transform(cropped_image)
+    return resized_image
+
+def random_rotation_3d(image, degrees=180):
+    # Define the rotation angles
+    angles = [random.uniform(-degrees, degrees) for _ in range(3)]
+    
+    # Create the rotation transform
+    rotation_transform = tio.RandomAffine(scales=(1, 1), degrees=angles, translation=(0, 0, 0), isotropic=True)
+    
+    # Apply the rotation
+    rotated_image = rotation_transform(image)
+    return rotated_image
+
+# Define a composed transform for 3D images
+class Composed3DTransform:
+    def __init__(self, output_size, scale=(0.7, 0.99), degrees=180):
+        self.output_size = output_size
+        self.scale = scale
+        self.degrees = degrees
+    
+    def __call__(self, image):
+        image = random_resized_crop_3d(image, self.output_size, self.scale)
+        image = random_rotation_3d(image, self.degrees)
+        return image
+
+
+img3d_transform = Composed3DTransform( (64, 64, 64))
