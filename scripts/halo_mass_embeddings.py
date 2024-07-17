@@ -66,6 +66,8 @@ class HaloMassHistTransformer(nn.Module):
         super(HaloMassHistTransformer, self).__init__()
         self.conv1d = nn.Conv1d(in_channels=1, out_channels=embed_dim, kernel_size=1)
 
+        self.positional_encoding = PositionalEncoding(embed_dim)
+
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads,
                                                    dim_feedforward=dim_feedforward,
                                                    dropout = dropout,
@@ -79,6 +81,8 @@ class HaloMassHistTransformer(nn.Module):
         x = x.unsqueeze(1)  # add channel dimension: (batch_size, 1, seq_len)
         x = self.conv1d(x)  # apply Conv1d: (batch_size, embed_dim, seq_len)
         x = x.permute(2, 0, 1)  # (seq_len, batch_size, embed_dim)
+
+        x = self.positional_encoding(x)
         x = self.transformer(x, src_key_padding_mask=src_key_padding_mask)
         x = x.permute(1, 0, 2)  # (batch_size, seq_len, embed_dim)
         x = self.fc_out(x)  # (batch_size, seq_len, output_dim)
@@ -171,3 +175,20 @@ class RegressionModel(BaseModel):
                     ax[i].legend()
                 plt.show()
                 return None
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, embed_dim, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        pe = torch.zeros(max_len, embed_dim)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embed_dim, 2).float() * (-np.log(10000.0) / embed_dim))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # x shape: (seq_len, batch_size, embed_dim)
+        x = x + self.pe[:x.size(0), :]
+        return x
