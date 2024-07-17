@@ -264,6 +264,8 @@ class HaloInfo:
         #snapshot = np.array(snapshot)/99
         mass = mass / np.max(mass)
         mass = np.log10(mass)
+        #minmax scaling
+        mass = (mass - np.nanmin(mass)) / (np.nanmax(mass) - np.nanmin(mass))
 
         snapshot = snapshot[::-1]
         mass = mass[::-1]
