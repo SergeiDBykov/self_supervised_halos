@@ -53,7 +53,6 @@ class BaseModel:
         return self.forward(x)
 
     def training_loop(self, train_loader, val_loader, num_epochs, device):
-        criterion = self.criterion
 
         for epoch in tqdm(range(num_epochs), desc="Epochs"):
             self.model.train()  # Set the model to training mode
