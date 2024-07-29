@@ -2,6 +2,7 @@ import pandas as pd
 import torch
 import torchvision
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
 import os
@@ -81,7 +82,14 @@ class BaseModel:
                 print(f"Epoch {epoch + 1}, Validation Loss: {avg_val_loss}")
 
             if self.scheduler:
-                self.scheduler.step()
+                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    if val_loader:
+                        self.scheduler.step(avg_val_loss)
+                    else:
+                        self.scheduler.step(avg_train_loss)
+                else:
+                    self.scheduler.step()
+                    
                 current_lr = self.scheduler.get_last_lr()[0]
             else:
                 current_lr = self.optimizer.param_groups[0]['lr']
@@ -89,6 +97,7 @@ class BaseModel:
 
     def save(self):
         filename = models_path + self.model.__class__.__name__ + '.pth'
+        filename_plt = models_path + self.model.__class__.__name__ + '.png'
         epoch = len(self.history['train_loss'])
         loss = self.history['train_loss'][-1]
         torch.save({
@@ -100,6 +109,18 @@ class BaseModel:
             'loss': loss
         }, filename)
         print(f'Model {self.model.__class__.__name__} saved at epoch {epoch}')
+
+        plt.figure()
+        plt.plot(self.history['train_loss'], label='train')
+        try:
+            plt.plot(self.history['val_loss'], label='val')
+        except:
+            pass
+
+        plt.legend()
+        plt.savefig(filename_plt)
+        plt.show()
+
 
     def load(self, filename):
         filename = models_path + filename

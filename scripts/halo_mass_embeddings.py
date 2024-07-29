@@ -64,6 +64,7 @@ def mask_time_series_batch(batch, mask_size=20, num_masks=2, num_masks_var=1, ma
                 prediction_mask[i, mask_indices] = True
 
     return unmasked_signal, masked_signal, prediction_mask
+    
 
 
 class PositionalEncoding(nn.Module):
